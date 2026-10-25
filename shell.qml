@@ -1137,7 +1137,7 @@ ShellRoot {
                     ? controlCenter.wifiMenuHeight
                     : (controlCenter.bluetoothMenuOpen
                         ? controlCenter.bluetoothMenuHeight
-                        : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : 460))))
+                        : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : controlCenter.homeMenuHeight))))
                 : 32
             width: controlCenter.isOpen ? 368 : 32
             height: targetHeight
@@ -1326,6 +1326,19 @@ ShellRoot {
                 : 0
             property var audioApps: []
             property bool audioAdjustmentActive: false
+            readonly property int primaryFontSize: 16
+            readonly property int secondaryFontSize: 13
+            readonly property int smallFontSize: 11
+            readonly property int audioRowCount: Math.max(1, Math.min(3, audioApps.length))
+            readonly property int audioBlockHeight: 154 + audioRowCount * 24
+            readonly property int homeMenuHeight: 234 + audioBlockHeight
+
+            function compactAudioDeviceName(value) {
+                let name = (value || "").replace(/\s+/g, " ").trim()
+                name = name.replace(/\s+(analog|digital|stereo|mono|аналоговый|аналоговое|цифровой|цифровое|стерео|моно).*$/i, "")
+                if (name.length <= 20) return name
+                return name.substring(0, 17).trim() + "..."
+            }
 
             function splitNmcli(line) {
                 let fields = []
@@ -2228,13 +2241,13 @@ ShellRoot {
                             }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                Text { text: "Wi-Fi"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13 }
+                                Text { text: "Wi-Fi"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize }
                                 Text {
                                     width: 78
                                     text: controlCenter.wifiEnabled
                                         ? (controlCenter.wifiSsid || controlCenter.wifiConnection || "Not connected")
                                         : "Off"
-                                    color: "#888888"; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                    color: "#888888"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                     elide: Text.ElideRight
                                 }
                             }
@@ -2279,12 +2292,12 @@ ShellRoot {
                             }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                Text { text: "Night mode"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13 }
+                                Text { text: "Night mode"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize }
                                 Text {
                                     text: controlCenter.nightModeForced
                                         ? "On"
                                         : (controlCenter.nightModeScheduleEnabled ? "Scheduled" : "Off")
-                                    color: "#888888"; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                    color: "#888888"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 }
                             }
                         }
@@ -2380,13 +2393,13 @@ ShellRoot {
                             }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                Text { text: "Bluetooth"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13 }
+                                Text { text: "Bluetooth"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize }
                                 Text {
                                     width: 78
                                     text: controlCenter.bluetoothEnabled
                                         ? (controlCenter.bluetoothCurrentName || "Not connected")
                                         : "Off"
-                                    color: "#888888"; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                    color: "#888888"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                     elide: Text.ElideRight
                                 }
                             }
@@ -2410,13 +2423,13 @@ ShellRoot {
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: "Mem"; color: "#ffffff"
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: controlCenter.memoryUsedGiB.toFixed(1) + " Gib"
                                     color: "#e8d79a"
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                                 }
                             }
 
@@ -2426,7 +2439,7 @@ ShellRoot {
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: "Proc"; color: "#ffffff"
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -2434,7 +2447,7 @@ ShellRoot {
                                     color: controlCenter.processorUsage >= 85
                                         ? "#ff3048"
                                         : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                                 }
                             }
 
@@ -2444,13 +2457,13 @@ ShellRoot {
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: "Bat"; color: "#ffffff"
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: controlCenter.batteryPresent ? controlCenter.batteryPercent : "—"
                                     color: "#ffffff"
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                                 }
                             }
                         }
@@ -2489,23 +2502,28 @@ ShellRoot {
 
                 // --- ПОЛЗУНОК ЗВУКА ---
                 Rectangle {
-                    width: parent.width; height: 226; radius: 24; color: "#161616"
+                    width: parent.width; height: controlCenter.audioBlockHeight; radius: 24; color: "#161616"
+                    Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
+                        width: 96
                         text: "Sound"; color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
                     Text {
-                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 12; leftMargin: 108; rightMargin: 58 }
-                        text: controlCenter.audioOutputName
+                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 14; leftMargin: 120; rightMargin: 66 }
+                        text: controlCenter.compactAudioDeviceName(controlCenter.audioOutputName)
                         color: "#777777"; elide: Text.ElideRight
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                        maximumLineCount: 1
                     }
                     Text {
-                        anchors { top: parent.top; right: parent.right; topMargin: 12; rightMargin: 16 }
+                        anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 16 }
+                        width: 42
+                        horizontalAlignment: Text.AlignRight
                         text: controlCenter.audioOutputVolume + "%"
-                        color: "#777777"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        color: "#777777"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
 
                     Slider {
@@ -2557,19 +2575,23 @@ ShellRoot {
 
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 70; leftMargin: 16 }
+                        width: 96
                         text: "Microphone"; color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
                     Text {
-                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 70; leftMargin: 108; rightMargin: 58 }
-                        text: controlCenter.audioInputName
+                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 72; leftMargin: 120; rightMargin: 66 }
+                        text: controlCenter.compactAudioDeviceName(controlCenter.audioInputName)
                         color: "#777777"; elide: Text.ElideRight
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                        maximumLineCount: 1
                     }
                     Text {
-                        anchors { top: parent.top; right: parent.right; topMargin: 70; rightMargin: 16 }
+                        anchors { top: parent.top; right: parent.right; topMargin: 72; rightMargin: 16 }
+                        width: 42
+                        horizontalAlignment: Text.AlignRight
                         text: controlCenter.audioInputVolume + "%"
-                        color: "#777777"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        color: "#777777"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
 
                     Slider {
@@ -2622,7 +2644,7 @@ ShellRoot {
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 128; leftMargin: 16 }
                         text: "Apps"; color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
 
                     Column {
@@ -2638,10 +2660,10 @@ ShellRoot {
 
                                 Text {
                                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                    width: 128
+                                    width: 120
                                     text: audioAppRow.modelData.name
                                     color: "#d0d0d0"; elide: Text.ElideRight
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 }
                                 Slider {
                                     id: appVolumeSlider
@@ -2688,7 +2710,7 @@ ShellRoot {
                         anchors { top: parent.top; left: parent.left; topMargin: 153; leftMargin: 16 }
                         visible: controlCenter.audioApps.length === 0
                         text: "No active apps"
-                        color: "#666666"; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                        color: "#666666"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
                 }
 
@@ -2729,7 +2751,7 @@ ShellRoot {
                     Item {
                         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 12; leftMargin: 16; rightMargin: 16 }
                         height: 20
-                        Text { text: "Brightness"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13; anchors.left: parent.left }
+                        Text { text: "Brightness"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize; anchors.left: parent.left }
                     }
 
                     Slider {
@@ -2823,13 +2845,13 @@ ShellRoot {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "Memory"; color: "#ffffff"
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: controlCenter.memoryUsedGiB.toFixed(1) + " Gib"
                                 color: "#e8d79a"
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                             }
                         }
 
@@ -2839,13 +2861,13 @@ ShellRoot {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "Battery"; color: "#ffffff"
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: controlCenter.batteryPresent ? controlCenter.batteryPercent + " %" : "—"
                                 color: "#777777"
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                             }
                         }
 
@@ -2855,7 +2877,7 @@ ShellRoot {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "Processor"; color: "#ffffff"
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -2863,7 +2885,7 @@ ShellRoot {
                                 color: controlCenter.processorUsage >= 85
                                     ? "#ff3048"
                                     : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                             }
                         }
                     }
@@ -2875,7 +2897,7 @@ ShellRoot {
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
                         text: "Power mode"; color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
 
                     Row {
@@ -2900,7 +2922,7 @@ ShellRoot {
                                     anchors.centerIn: parent
                                     text: parent.modelData.label
                                     color: parent.selected ? "#050505" : "#8a8a8a"
-                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 }
 
                                 MouseArea {
@@ -2921,13 +2943,13 @@ ShellRoot {
                             ? "Charging"
                             : (controlCenter.batteryStatus === "full" ? "Fully charged" : "Battery")
                         color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
                     Text {
                         anchors { top: parent.top; right: parent.right; topMargin: 13; rightMargin: 16 }
                         text: controlCenter.batteryPresent ? controlCenter.batteryPercent + "%" : "—"
                         color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
 
                     Rectangle {
@@ -2944,7 +2966,7 @@ ShellRoot {
                         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 16; bottomMargin: 12 }
                         text: controlCenter.batteryTimeText()
                         color: "#777777"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
                 }
 
@@ -2954,13 +2976,13 @@ ShellRoot {
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
                         text: "Battery draining"; color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
                     Text {
                         anchors { top: parent.top; right: parent.right; topMargin: 12; rightMargin: 16 }
                         text: controlCenter.batteryPresent ? controlCenter.batteryHealth + "%" : "—"
                         color: "#ffffff"
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
 
                     Rectangle {
@@ -3018,23 +3040,23 @@ ShellRoot {
                             text: controlCenter.wifiEnabled
                                 ? (controlCenter.wifiSsid || controlCenter.wifiConnection || "Not connected")
                                 : "Wi-Fi is off"
-                            color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                            color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                         }
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter; spacing: 22
                             visible: controlCenter.wifiActionMessage === ""
                                 && controlCenter.wifiEnabled
                                 && (controlCenter.wifiSsid !== "" || controlCenter.wifiConnection !== "")
-                            Text { text: "Ip : " + controlCenter.wifiIp; color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11 }
-                            Text { text: controlCenter.wifiSignal + " %"; color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11 }
-                            Text { text: controlCenter.wifiBand; color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11 }
+                            Text { text: "Ip : " + controlCenter.wifiIp; color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize }
+                            Text { text: controlCenter.wifiSignal + " %"; color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize }
+                            Text { text: controlCenter.wifiBand; color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize }
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             visible: controlCenter.wifiActionMessage !== ""
                             width: 300
                             text: controlCenter.wifiActionMessage
-                            color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                            color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                         }
@@ -3054,7 +3076,7 @@ ShellRoot {
                     Text {
                         id: savedNetworksTitle
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
-                        text: "Saved"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        text: "Saved"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
 
                     ListView {
@@ -3076,7 +3098,7 @@ ShellRoot {
                                 anchors { left: parent.left; leftMargin: 10; right: savedNetworkStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
                                 text: savedNetworkRow.modelData.name
                                 color: "#aaaaaa"
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 elide: Text.ElideRight
                             }
 
@@ -3116,7 +3138,7 @@ ShellRoot {
                     Text {
                         anchors { top: savedNetworksTitle.bottom; left: parent.left; topMargin: 8; leftMargin: 16 }
                         visible: controlCenter.wifiAvailableSavedNetworks.length === 0
-                        text: "No saved networks nearby"; color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        text: "No saved networks nearby"; color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
                 }
 
@@ -3127,7 +3149,7 @@ ShellRoot {
                     Text {
                         id: newNetworksTitle
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
-                        text: "New connection"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        text: "New connection"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
 
                     ListView {
@@ -3147,7 +3169,7 @@ ShellRoot {
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: newNetworkStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
                                 text: newNetworkRow.modelData.ssid
-                                color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 elide: Text.ElideRight
                             }
 
@@ -3188,7 +3210,7 @@ ShellRoot {
                         anchors { top: newNetworksTitle.bottom; left: parent.left; topMargin: 8; leftMargin: 16 }
                         visible: controlCenter.wifiNewNetworks.length === 0
                         text: controlCenter.wifiEnabled ? "No new networks" : "Turn Wi-Fi on to scan"
-                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
                 }
             }
@@ -3236,7 +3258,7 @@ ShellRoot {
                             text: controlCenter.bluetoothEnabled
                                 ? (controlCenter.bluetoothCurrentName || "Not connected")
                                 : "Bluetooth is off"
-                            color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                            color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                         }
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter; spacing: 22
@@ -3244,12 +3266,12 @@ ShellRoot {
                                 && controlCenter.bluetoothCurrentAddress !== ""
                             Text {
                                 text: controlCenter.bluetoothCurrentType
-                                color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                             }
                             Text {
                                 visible: controlCenter.bluetoothCurrentBattery >= 0
                                 text: controlCenter.bluetoothCurrentBattery + " %"
-                                color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                             }
                         }
                         Text {
@@ -3257,7 +3279,7 @@ ShellRoot {
                             visible: controlCenter.bluetoothActionMessage !== ""
                             width: 280
                             text: controlCenter.bluetoothActionMessage
-                            color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                            color: "#707070"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                         }
@@ -3277,7 +3299,7 @@ ShellRoot {
                     Text {
                         id: savedBluetoothTitle
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
-                        text: "Saved"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        text: "Saved"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
 
                     ListView {
@@ -3298,7 +3320,7 @@ ShellRoot {
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: savedBluetoothStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
                                 text: savedBluetoothRow.modelData.name
-                                color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 elide: Text.ElideRight
                             }
 
@@ -3341,7 +3363,7 @@ ShellRoot {
                         anchors { top: savedBluetoothTitle.bottom; left: parent.left; topMargin: 8; leftMargin: 16 }
                         visible: controlCenter.bluetoothSavedDevices.length === 0
                         text: "No saved devices"
-                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
                 }
 
@@ -3352,7 +3374,7 @@ ShellRoot {
                     Text {
                         id: newBluetoothTitle
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
-                        text: "New pair"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        text: "New pair"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
 
                     ListView {
@@ -3372,7 +3394,7 @@ ShellRoot {
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: newBluetoothStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
                                 text: newBluetoothRow.modelData.name
-                                color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                                 elide: Text.ElideRight
                             }
 
@@ -3413,7 +3435,7 @@ ShellRoot {
                         anchors { top: newBluetoothTitle.bottom; left: parent.left; topMargin: 8; leftMargin: 16 }
                         visible: controlCenter.bluetoothNewDevices.length === 0
                         text: controlCenter.bluetoothEnabled ? "No new devices" : "Turn Bluetooth on to scan"
-                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                     }
                 }
             }
@@ -3559,7 +3581,7 @@ ShellRoot {
                     visible: controlCenter.nightModeError !== ""
                     width: parent.width - 24
                     text: controlCenter.nightModeError
-                    color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: 9
+                    color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                     horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
             }
@@ -3592,7 +3614,7 @@ ShellRoot {
                         anchors { top: parent.top; left: parent.left; topMargin: 14; leftMargin: 16 }
                         width: parent.width - 32
                         text: "Connect to " + controlCenter.wifiPendingSsid
-                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                         elide: Text.ElideRight
                     }
 
@@ -3604,7 +3626,7 @@ ShellRoot {
                         echoMode: TextInput.Password
                         color: "#ffffff"
                         placeholderTextColor: "#666666"
-                        font.family: "SF Pro Rounded"; font.pixelSize: 12
+                        font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                         leftPadding: 12; rightPadding: 12
                         background: Rectangle { radius: 17; color: "#090909"; border.width: 1; border.color: wifiPasswordField.activeFocus ? "#25d8a3" : "#303030" }
                         onAccepted: controlCenter.connectVisibleNetwork(controlCenter.wifiPendingSsid, text)
@@ -3617,13 +3639,13 @@ ShellRoot {
                         Rectangle {
                             width: 58; height: 26; radius: 13; color: "transparent"
                             border.width: 1; border.color: "#404040"
-                            Text { anchors.centerIn: parent; text: "Cancel"; color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10 }
+                            Text { anchors.centerIn: parent; text: "Cancel"; color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize }
                             MouseArea { anchors.fill: parent; onClicked: controlCenter.wifiPasswordPromptOpen = false }
                         }
 
                         Rectangle {
                             width: 66; height: 26; radius: 13; color: "#25d8a3"
-                            Text { anchors.centerIn: parent; text: "Connect"; color: "#050505"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10 }
+                            Text { anchors.centerIn: parent; text: "Connect"; color: "#050505"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize }
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: controlCenter.connectVisibleNetwork(controlCenter.wifiPendingSsid, wifiPasswordField.text)
