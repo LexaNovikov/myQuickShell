@@ -46,7 +46,7 @@ sudo pacman -S --needed - < dependencies.txt
 Скопируйте файлы `SF-Pro-Rounded-*.otf` в пользовательский каталог шрифтов и пересоберите кэш:
 
 ```bash
- mkdir -p ~/.local/share/fonts/SF-Pro
+mkdir -p ~/.local/share/fonts/SF-Pro
 cd ~/.local/share/fonts/SF-Pro
 
 # 2. Скачиваем архив с готовыми шрифтами SF Pro
