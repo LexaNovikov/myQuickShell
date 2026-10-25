@@ -1,0 +1,13 @@
+quickshell
+playerctl
+networkmanager
+bluez
+bluez-utils
+brightnessctl
+pipewire
+pipewire-pulse
+wireplumber
+libpulse
+perl
+curl
+systemd

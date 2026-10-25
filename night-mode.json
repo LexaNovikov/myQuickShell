@@ -1,0 +1,7 @@
+{
+  "forced": false,
+  "schedule": false,
+  "temperature": 4400,
+  "from": "21:00:00",
+  "to": "07:00:00"
+}
