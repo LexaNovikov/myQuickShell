@@ -1139,7 +1139,7 @@ ShellRoot {
                         ? controlCenter.bluetoothMenuHeight
                         : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : controlCenter.homeMenuHeight))))
                 : 32
-            width: controlCenter.isOpen ? 368 : 32
+            width: controlCenter.isOpen ? 408 : 32
             height: targetHeight
             radius: controlCenter.isOpen ? 32 : 16
             color: "#000000"
@@ -1329,6 +1329,7 @@ ShellRoot {
             readonly property int primaryFontSize: 16
             readonly property int secondaryFontSize: 13
             readonly property int smallFontSize: 11
+            readonly property int wideTileWidth: 154
             readonly property int audioRowCount: Math.max(1, Math.min(3, audioApps.length))
             readonly property int audioBlockHeight: 154 + audioRowCount * 24
             readonly property int homeMenuHeight: 234 + audioBlockHeight
@@ -2194,7 +2195,7 @@ ShellRoot {
                     spacing: 8
                     Rectangle {
                         id: wifiTile
-                        width: 138; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
                         Row {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
@@ -2243,7 +2244,7 @@ ShellRoot {
                                 anchors.verticalCenter: parent.verticalCenter
                                 Text { text: "Wi-Fi"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize }
                                 Text {
-                                    width: 78
+                                    width: 94
                                     text: controlCenter.wifiEnabled
                                         ? (controlCenter.wifiSsid || controlCenter.wifiConnection || "Not connected")
                                         : "Off"
@@ -2260,7 +2261,7 @@ ShellRoot {
                     }
                     Rectangle {
                         id: nightModeTile
-                        width: 138; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
                         Row {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
@@ -2355,7 +2356,7 @@ ShellRoot {
                     spacing: 8
                     Rectangle {
                         id: bluetoothTile
-                        width: 138; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
                         Row {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
@@ -2395,7 +2396,7 @@ ShellRoot {
                                 anchors.verticalCenter: parent.verticalCenter
                                 Text { text: "Bluetooth"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize }
                                 Text {
-                                    width: 78
+                                    width: 94
                                     text: controlCenter.bluetoothEnabled
                                         ? (controlCenter.bluetoothCurrentName || "Not connected")
                                         : "Off"
@@ -2412,7 +2413,7 @@ ShellRoot {
                     }
                     Rectangle {
                         id: usageTile
-                        width: 138; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
                         Row {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                             spacing: 1
