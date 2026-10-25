@@ -57,10 +57,65 @@ ShellRoot {
         anchors { top: true; left: true; right: true }
         focusable: false
 
+        property int playerSurfaceHeight: 32
+        property int islandSurfaceHeight: 32
+        property int controlSurfaceHeight: 32
+
+        function reservePlayerHeight(target) {
+            if (target >= playerSurfaceHeight) {
+                playerSurfaceShrink.stop()
+                playerSurfaceHeight = target
+            } else {
+                playerSurfaceShrink.targetHeight = target
+                playerSurfaceShrink.restart()
+            }
+        }
+
+        function reserveIslandHeight(target) {
+            if (target >= islandSurfaceHeight) {
+                islandSurfaceShrink.stop()
+                islandSurfaceHeight = target
+            } else {
+                islandSurfaceShrink.targetHeight = target
+                islandSurfaceShrink.restart()
+            }
+        }
+
+        function reserveControlHeight(target) {
+            if (target >= controlSurfaceHeight) {
+                controlSurfaceShrink.stop()
+                controlSurfaceHeight = target
+            } else {
+                controlSurfaceShrink.targetHeight = target
+                controlSurfaceShrink.restart()
+            }
+        }
+
+        Timer {
+            id: playerSurfaceShrink
+            property int targetHeight: 32
+            interval: 300
+            onTriggered: mainWindow.playerSurfaceHeight = targetHeight
+        }
+
+        Timer {
+            id: islandSurfaceShrink
+            property int targetHeight: 32
+            interval: 320
+            onTriggered: mainWindow.islandSurfaceHeight = targetHeight
+        }
+
+        Timer {
+            id: controlSurfaceShrink
+            property int targetHeight: 32
+            interval: 320
+            onTriggered: mainWindow.controlSurfaceHeight = targetHeight
+        }
+
         implicitHeight: {
-            let ctrlHeight = controlCenter.isOpen ? controlCenter.y + controlCenter.height + 20 : 0
-            let playerHeight = playerWidget.expanded ? playerWidget.y + playerWidget.height + 20 : 0
-            return Math.max(island.height + 20, Math.max(ctrlHeight, playerHeight))
+            let ctrlHeight = controlSurfaceHeight > 32 ? controlWidget.y + controlSurfaceHeight + 20 : 0
+            let playerHeight = playerSurfaceHeight > 32 ? playerWidget.y + playerSurfaceHeight + 20 : 0
+            return Math.max(islandSurfaceHeight + 20, Math.max(ctrlHeight, playerHeight))
         }
         color: "transparent"
         exclusiveZone: 38
@@ -69,6 +124,7 @@ ShellRoot {
         Rectangle {
             id: playerWidget
             property bool expanded: false
+            readonly property int targetHeight: expanded ? 160 : 32
 
             // Внутренние переменные состояния
             property string trackTitle: "Тишина"
@@ -79,6 +135,15 @@ ShellRoot {
             property real trackLength: 0
             property string trackStatus: "Stopped"
             readonly property bool showCompactArtwork: trackStatus === "Playing" && trackArt !== ""
+
+            function refreshPlayerState() {
+                if (!mprisMeta.running) mprisMeta.running = true
+                if (!mprisStatus.running) mprisStatus.running = true
+            }
+
+            function refreshPlayerPosition() {
+                if (!mprisPos.running) mprisPos.running = true
+            }
 
             // Функция форматирования времени
             function formatTime(usec) {
@@ -138,20 +203,37 @@ ShellRoot {
             }
 
             // Процесс для отправки команд (пауза, переключение, перемотка)
-            Process { id: mprisCmd }
-
-            // Опрашиваем плеер каждую полсекунды
-            Timer {
-                interval: 500; running: true; repeat: true
-                onTriggered: {
-                    mprisMeta.running = true
-                    mprisStatus.running = true
-                    mprisPos.running = true
+            Process {
+                id: mprisCmd
+                onRunningChanged: {
+                    if (!running) {
+                        playerWidget.refreshPlayerState()
+                        playerWidget.refreshPlayerPosition()
+                    }
                 }
             }
 
+            // Название и статус не требуют опроса несколько раз за кадр.
+            Timer {
+                interval: 1000; running: true; repeat: true
+                onTriggered: playerWidget.refreshPlayerState()
+            }
+
+            // Позиция нужна часто только пока раскрыт играющий плеер.
+            Timer {
+                interval: 500
+                running: playerWidget.expanded && playerWidget.trackStatus === "Playing"
+                repeat: true
+                triggeredOnStart: true
+                onTriggered: playerWidget.refreshPlayerPosition()
+            }
+
+            onExpandedChanged: if (expanded) refreshPlayerPosition()
+            onTargetHeightChanged: mainWindow.reservePlayerHeight(targetHeight)
+            Component.onCompleted: mainWindow.reservePlayerHeight(targetHeight)
+
             width: expanded ? 360 : 32
-            height: expanded ? 160 : 32
+            height: targetHeight
             radius: expanded ? 24 : 16
             color: expanded ? "#0a0a0a" : "#000000"
             clip: true
@@ -160,9 +242,9 @@ ShellRoot {
             anchors.right: island.left
             anchors.rightMargin: 6
 
-            Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
-            Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
-            Behavior on radius { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
+            Behavior on width { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on height { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on radius { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
 
             Rectangle {
                 width: 32; height: 32; radius: 16; color: "transparent"
@@ -245,7 +327,11 @@ ShellRoot {
                         Image {
                             anchors.fill: parent
                             source: playerWidget.trackArt
+                            sourceSize.width: 256
+                            sourceSize.height: 256
                             fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            smooth: true
                         }
                     }
 
@@ -408,6 +494,9 @@ ShellRoot {
                 return buttons
             }
             readonly property bool notificationHasButtons: notificationButtons.length > 0 || notificationCanReply
+            readonly property int targetHeight: expanded
+                ? 320
+                : (notificationVisible ? ((notificationHasButtons || notificationReplyOpen) ? 116 : 78) : 32)
             readonly property var weekdayNames: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
             readonly property string todayKey: dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate())
             property string selectedDateKey: todayKey
@@ -546,13 +635,15 @@ ShellRoot {
             }
 
             width: expanded ? 650 : (notificationVisible ? 380 : 68)
-            height: expanded ? 320 : (notificationVisible ? ((notificationHasButtons || notificationReplyOpen) ? 116 : 78) : 32)
+            height: targetHeight
             radius: expanded ? 34 : (notificationVisible ? 26 : 16)
             color: "#000000"
             clip: true
-            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
-            Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
-            Behavior on radius { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
+            onTargetHeightChanged: mainWindow.reserveIslandHeight(targetHeight)
+            Component.onCompleted: mainWindow.reserveIslandHeight(targetHeight)
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            Behavior on radius { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
             Timer {
                 interval: 1000
@@ -667,6 +758,8 @@ ShellRoot {
                         id: notificationImage
                         anchors.fill: parent
                         source: island.notificationImageSource(island.activeNotification)
+                        sourceSize.width: 112
+                        sourceSize.height: 112
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         smooth: true
@@ -1037,25 +1130,29 @@ ShellRoot {
         // 3. Кружок настроек справа
         Rectangle {
             id: controlWidget
-            width: controlCenter.isOpen ? 368 : 32
-            height: controlCenter.isOpen
+            readonly property int targetHeight: controlCenter.isOpen
                 ? (controlCenter.wifiMenuOpen
                     ? controlCenter.wifiMenuHeight
                     : (controlCenter.bluetoothMenuOpen
                         ? controlCenter.bluetoothMenuHeight
                         : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : 460)))
                 : 32
+            width: controlCenter.isOpen ? 368 : 32
+            height: targetHeight
             radius: controlCenter.isOpen ? 32 : 16
             color: "#000000"
             clip: true
+
+            onTargetHeightChanged: mainWindow.reserveControlHeight(targetHeight)
+            Component.onCompleted: mainWindow.reserveControlHeight(targetHeight)
 
             anchors.left: island.right
             anchors.leftMargin: 6
             anchors.top: island.top
 
-            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
-            Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
-            Behavior on radius { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            Behavior on radius { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
             Behavior on color { ColorAnimation { duration: 300 } }
 
             Image {
@@ -1255,6 +1352,13 @@ ShellRoot {
                 if (!wifiAccessPointsQuery.running) wifiAccessPointsQuery.running = true
                 if (!wifiSavedQuery.running) wifiSavedQuery.running = true
                 if (!wifiIpQuery.running) wifiIpQuery.running = true
+            }
+
+            function refreshConnectivitySummary() {
+                if (!wifiRadioQuery.running) wifiRadioQuery.running = true
+                if (!wifiStatusQuery.running) wifiStatusQuery.running = true
+                if (!bluetoothPowerQuery.running) bluetoothPowerQuery.running = true
+                if (!bluetoothConnectedQuery.running) bluetoothConnectedQuery.running = true
             }
 
             function openWifiMenu() {
@@ -1694,12 +1798,16 @@ ShellRoot {
             }
 
             Timer {
-                interval: 5000
+                interval: controlCenter.isOpen ? 5000 : 10000
                 running: true
                 repeat: true
                 onTriggered: {
-                    controlCenter.refreshWifi()
-                    controlCenter.refreshBluetooth()
+                    if (controlCenter.wifiMenuOpen)
+                        controlCenter.refreshWifi()
+                    else if (controlCenter.bluetoothMenuOpen)
+                        controlCenter.refreshBluetooth()
+                    else
+                        controlCenter.refreshConnectivitySummary()
                 }
             }
 
@@ -2504,8 +2612,14 @@ ShellRoot {
                     }
 
                     Timer {
-                        interval: 500; running: true; repeat: true
-                        onTriggered: brightnessGet.running = true
+                        interval: 1500
+                        running: controlCenter.isOpen
+                            && !controlCenter.wifiMenuOpen
+                            && !controlCenter.bluetoothMenuOpen
+                            && !controlCenter.nightModeMenuOpen
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: if (!brightnessGet.running) brightnessGet.running = true
                     }
 
                     Item {

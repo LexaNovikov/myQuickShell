@@ -10,4 +10,5 @@ wireplumber
 libpulse
 perl
 curl
+fontconfig
 systemd
