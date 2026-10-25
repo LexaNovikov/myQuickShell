@@ -46,9 +46,19 @@ sudo pacman -S --needed - < dependencies.txt
 Скопируйте файлы `SF-Pro-Rounded-*.otf` в пользовательский каталог шрифтов и пересоберите кэш:
 
 ```bash
-mkdir -p ~/.local/share/fonts/SF-Pro
-cp /путь/к/шрифтам/SF-Pro-Rounded-*.otf ~/.local/share/fonts/SF-Pro/
-fc-cache -f ~/.local/share/fonts
+ mkdir -p ~/.local/share/fonts/SF-Pro
+cd ~/.local/share/fonts/SF-Pro
+
+# 2. Скачиваем архив с готовыми шрифтами SF Pro
+curl -LO https://github.com/sahibjotsaggu/San-Francisco-Pro-Fonts/archive/refs/heads/master.zip
+
+# 3. Распаковываем и достаем нужные файлы
+unzip master.zip
+mv San-Francisco-Pro-Fonts-master/*.otf .
+
+# 4. Убираем мусор и обновляем системный кэш шрифтов
+rm -rf master.zip San-Francisco-Pro-Fonts-master
+fc-cache -fv
 ```
 
 Проверьте, какое семейство выбрал fontconfig:
