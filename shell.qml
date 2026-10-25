@@ -1131,11 +1131,13 @@ ShellRoot {
         Rectangle {
             id: controlWidget
             readonly property int targetHeight: controlCenter.isOpen
-                ? (controlCenter.wifiMenuOpen
+                ? (controlCenter.powerMenuOpen
+                    ? controlCenter.powerMenuHeight
+                    : (controlCenter.wifiMenuOpen
                     ? controlCenter.wifiMenuHeight
                     : (controlCenter.bluetoothMenuOpen
                         ? controlCenter.bluetoothMenuHeight
-                        : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : 460)))
+                        : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : 460))))
                 : 32
             width: controlCenter.isOpen ? 368 : 32
             height: targetHeight
@@ -1174,6 +1176,7 @@ ShellRoot {
                     controlCenter.wifiMenuOpen = false
                     controlCenter.bluetoothMenuOpen = false
                     controlCenter.nightModeMenuOpen = false
+                    controlCenter.powerMenuOpen = false
                     island.expanded = false
                     playerWidget.expanded = false
                     controlCenter.isOpen = true
@@ -1188,6 +1191,7 @@ ShellRoot {
                             controlCenter.wifiMenuOpen = false
                             controlCenter.bluetoothMenuOpen = false
                             controlCenter.nightModeMenuOpen = false
+                            controlCenter.powerMenuOpen = false
                         }
                         island.expanded = false
                         playerWidget.expanded = false
@@ -1216,6 +1220,7 @@ ShellRoot {
             property bool wifiMenuOpen: false
             property bool bluetoothMenuOpen: false
             property bool nightModeMenuOpen: false
+            property bool powerMenuOpen: false
             property int pointerHoldCount: 0
             property bool wifiEnabled: false
             property string wifiDevice: "wlan0"
@@ -1288,6 +1293,7 @@ ShellRoot {
             readonly property int bluetoothNewBlockHeight: Math.min(190, 43 + Math.max(1, bluetoothNewDevices.length) * 28)
             readonly property int bluetoothMenuHeight: 32 + 52 + 8 + bluetoothSavedBlockHeight + 8 + bluetoothNewBlockHeight
             readonly property int nightModeMenuHeight: 210
+            readonly property int powerMenuHeight: 368
             property bool nightModeForced: false
             property bool nightModeScheduleEnabled: false
             property bool nightModeActive: false
@@ -1298,6 +1304,12 @@ ShellRoot {
             property bool nightModeApplyPending: false
             property real memoryUsedGiB: 0
             property int processorUsage: 0
+            property bool batteryPresent: false
+            property int batteryPercent: 0
+            property string batteryStatus: "unknown"
+            property int batteryMinutesToFull: -1
+            property int batteryHealth: 0
+            property string powerProfile: "balanced"
             readonly property var audioSink: Pipewire.defaultAudioSink
             readonly property var audioSource: Pipewire.defaultAudioSource
             readonly property string audioOutputName: audioSink
@@ -1364,6 +1376,7 @@ ShellRoot {
             function openWifiMenu() {
                 bluetoothMenuOpen = false
                 nightModeMenuOpen = false
+                powerMenuOpen = false
                 wifiMenuOpen = true
                 refreshWifi()
                 if (wifiEnabled && !wifiRescanCommand.running)
@@ -1478,6 +1491,7 @@ ShellRoot {
             function openBluetoothMenu() {
                 wifiMenuOpen = false
                 nightModeMenuOpen = false
+                powerMenuOpen = false
                 bluetoothMenuOpen = true
                 refreshBluetooth()
                 if (bluetoothEnabled && !bluetoothScanCommand.running)
@@ -1607,7 +1621,36 @@ ShellRoot {
             function openNightModeMenu() {
                 wifiMenuOpen = false
                 bluetoothMenuOpen = false
+                powerMenuOpen = false
                 nightModeMenuOpen = true
+            }
+
+            function openPowerMenu() {
+                wifiMenuOpen = false
+                bluetoothMenuOpen = false
+                nightModeMenuOpen = false
+                powerMenuOpen = true
+                refreshSystemPanels()
+            }
+
+            function setPowerProfile(profile) {
+                if (powerProfileCommand.running || profile === powerProfile) return
+                powerProfileCommand.command = [
+                    "busctl", "--system", "set-property",
+                    "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles",
+                    "net.hadess.PowerProfiles", "ActiveProfile", "s", profile
+                ]
+                powerProfileCommand.running = true
+            }
+
+            function batteryTimeText() {
+                if (!batteryPresent) return "No battery detected"
+                if (batteryStatus === "full") return "Fully charged"
+                if (batteryStatus !== "charging" || batteryMinutesToFull < 0)
+                    return "Running on battery"
+                let hours = Math.floor(batteryMinutesToFull / 60)
+                let minutes = batteryMinutesToFull % 60
+                return "Full charge after  " + hours + "H " + minutes + "M"
             }
 
             function runSessionAction(action) {
@@ -2036,7 +2079,29 @@ ShellRoot {
                         let processor = parseInt(values[1])
                         if (!isNaN(memory)) controlCenter.memoryUsedGiB = memory
                         if (!isNaN(processor)) controlCenter.processorUsage = processor
+                        if (values.length >= 8) {
+                            controlCenter.batteryPresent = values[2] === "1"
+                            controlCenter.batteryPercent = parseInt(values[3]) || 0
+                            controlCenter.batteryStatus = values[4] || "unknown"
+                            controlCenter.batteryMinutesToFull = parseInt(values[5])
+                            controlCenter.batteryHealth = parseInt(values[6]) || 0
+                            controlCenter.powerProfile = values[7] || "balanced"
+                        }
                     }
+                }
+            }
+
+            Process {
+                id: powerProfileCommand
+                stderr: StdioCollector {
+                    onStreamFinished: {
+                        let error = this.text.trim()
+                        if (error !== "") console.warn("Could not change power profile:", error)
+                    }
+                }
+                onRunningChanged: {
+                    if (!running && !systemStatsQuery.running)
+                        systemStatsQuery.running = true
                 }
             }
 
@@ -2109,6 +2174,7 @@ ShellRoot {
                 visible: !controlCenter.wifiMenuOpen
                     && !controlCenter.bluetoothMenuOpen
                     && !controlCenter.nightModeMenuOpen
+                    && !controlCenter.powerMenuOpen
 
                 // --- РЯД 1: Wi-Fi, Night mode ---
                 Row {
@@ -2332,29 +2398,66 @@ ShellRoot {
                         }
                     }
                     Rectangle {
+                        id: usageTile
                         width: 138; height: 52; radius: 24; color: "#161616"
-                        Column {
-                            anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 16 }
-                            spacing: 0
-                            Text { text: "Mem"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13 }
-                            Text { text: "Proc"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13 }
+                        Row {
+                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                            spacing: 1
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: (parent.width - 2) / 3; spacing: 0
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "Mem"; color: "#ffffff"
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                }
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: controlCenter.memoryUsedGiB.toFixed(1) + " Gib"
+                                    color: "#e8d79a"
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                                }
+                            }
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: (parent.width - 2) / 3; spacing: 0
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "Proc"; color: "#ffffff"
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                }
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: controlCenter.processorUsage
+                                    color: controlCenter.processorUsage >= 85
+                                        ? "#ff3048"
+                                        : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                                }
+                            }
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: (parent.width - 2) / 3; spacing: 0
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "Bat"; color: "#ffffff"
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                }
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: controlCenter.batteryPresent ? controlCenter.batteryPercent : "—"
+                                    color: "#ffffff"
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 10
+                                }
+                            }
                         }
-                        Column {
-                            anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 16 }
-                            spacing: 0
-                            Text {
-                                anchors.right: parent.right
-                                text: controlCenter.memoryUsedGiB.toFixed(1) + " Gib"
-                                color: "#e8d79a"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
-                            }
-                            Text {
-                                anchors.right: parent.right
-                                text: controlCenter.processorUsage + "%"
-                                color: controlCenter.processorUsage >= 85
-                                    ? "#ff3048"
-                                    : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
-                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
-                            }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: controlCenter.openPowerMenu()
                         }
                     }
                     Rectangle {
@@ -2617,6 +2720,7 @@ ShellRoot {
                             && !controlCenter.wifiMenuOpen
                             && !controlCenter.bluetoothMenuOpen
                             && !controlCenter.nightModeMenuOpen
+                            && !controlCenter.powerMenuOpen
                         repeat: true
                         triggeredOnStart: true
                         onTriggered: if (!brightnessGet.running) brightnessGet.running = true
@@ -2669,6 +2773,206 @@ ShellRoot {
                     }
                 }
 
+            }
+
+            Column {
+                id: powerMenu
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 8
+                visible: controlCenter.powerMenuOpen
+
+                Rectangle {
+                    width: parent.width; height: 52; radius: 24; color: "#161616"
+
+                    Rectangle {
+                        width: 40; height: 40; radius: 20
+                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                        color: "#25d8a3"
+
+                        Canvas {
+                            anchors.centerIn: parent
+                            width: 22; height: 22
+                            onPaint: {
+                                let ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = "#050505"
+                                ctx.lineWidth = 2.4
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(9, 5)
+                                ctx.lineTo(3, 11)
+                                ctx.lineTo(9, 17)
+                                ctx.moveTo(3, 11)
+                                ctx.lineTo(18, 11)
+                                ctx.stroke()
+                            }
+                        }
+
+                        MouseArea { anchors.fill: parent; onClicked: controlCenter.powerMenuOpen = false }
+                    }
+
+                    Row {
+                        anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 46; rightMargin: 26 }
+                        spacing: 1
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: (parent.width - 2) / 3; spacing: 0
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Memory"; color: "#ffffff"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: controlCenter.memoryUsedGiB.toFixed(1) + " Gib"
+                                color: "#e8d79a"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                            }
+                        }
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: (parent.width - 2) / 3; spacing: 0
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Battery"; color: "#ffffff"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: controlCenter.batteryPresent ? controlCenter.batteryPercent + " %" : "—"
+                                color: "#777777"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                            }
+                        }
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: (parent.width - 2) / 3; spacing: 0
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Processor"; color: "#ffffff"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 14
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: controlCenter.processorUsage + "%"
+                                color: controlCenter.processorUsage >= 85
+                                    ? "#ff3048"
+                                    : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 80; radius: 24; color: "#161616"
+
+                    Text {
+                        anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
+                        text: "Power mode"; color: "#ffffff"
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                    }
+
+                    Row {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 14 }
+                        height: 25; spacing: 4
+
+                        Repeater {
+                            model: [
+                                { label: "Eco", profile: "power-saver" },
+                                { label: "Balance", profile: "balanced" },
+                                { label: "Turbo", profile: "performance" }
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                readonly property bool selected: controlCenter.powerProfile === modelData.profile
+                                width: (parent.width - 8) / 3; height: 25; radius: 13
+                                color: selected ? "#25d8a3" : "#050505"
+                                Behavior on color { ColorAnimation { duration: 160 } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: parent.modelData.label
+                                    color: parent.selected ? "#050505" : "#8a8a8a"
+                                    font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 11
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: controlCenter.setPowerProfile(parent.modelData.profile)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 106; radius: 24; color: "#161616"
+
+                    Text {
+                        anchors { top: parent.top; left: parent.left; topMargin: 13; leftMargin: 16 }
+                        text: controlCenter.batteryStatus === "charging"
+                            ? "Charging"
+                            : (controlCenter.batteryStatus === "full" ? "Fully charged" : "Battery")
+                        color: "#ffffff"
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                    }
+                    Text {
+                        anchors { top: parent.top; right: parent.right; topMargin: 13; rightMargin: 16 }
+                        text: controlCenter.batteryPresent ? controlCenter.batteryPercent + "%" : "—"
+                        color: "#ffffff"
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                    }
+
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 42 }
+                        height: 22; radius: 11; color: "#050505"; clip: true
+                        Rectangle {
+                            width: controlCenter.batteryPresent ? parent.width * Math.min(100, controlCenter.batteryPercent) / 100 : 0
+                            height: parent.height; radius: 11; color: "#25d8a3"
+                            Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                        }
+                    }
+
+                    Text {
+                        anchors { left: parent.left; bottom: parent.bottom; leftMargin: 16; bottomMargin: 12 }
+                        text: controlCenter.batteryTimeText()
+                        color: "#777777"
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 74; radius: 24; color: "#161616"
+
+                    Text {
+                        anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
+                        text: "Battery draining"; color: "#ffffff"
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                    }
+                    Text {
+                        anchors { top: parent.top; right: parent.right; topMargin: 12; rightMargin: 16 }
+                        text: controlCenter.batteryPresent ? controlCenter.batteryHealth + "%" : "—"
+                        color: "#ffffff"
+                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 13
+                    }
+
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 14 }
+                        height: 22; radius: 11; color: "#050505"; clip: true
+                        Rectangle {
+                            width: controlCenter.batteryPresent ? parent.width * Math.min(100, controlCenter.batteryHealth) / 100 : 0
+                            height: parent.height; radius: 11; color: "#25d8a3"
+                            Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                        }
+                    }
+                }
             }
 
             Column {

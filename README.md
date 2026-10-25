@@ -9,6 +9,7 @@
 - Bluetooth через BlueZ (`bluetoothctl`);
 - громкость PipeWire/PulseAudio и громкость отдельных приложений;
 - яркость экрана через `brightnessctl`;
+- заряд, здоровье батареи и переключение профилей Eco/Balance/Turbo;
 - загрузка событий из приватной ссылки Google Calendar в формате iCalendar;
 - уведомления на пять секунд, действия уведомлений и inline reply;
 - ночной режим через Noctalia или `wlsunset`;
@@ -136,6 +137,12 @@ chmod 600 ~/.config/quickshell/google-calendar.url
 - Если Noctalia установлена и её файл настроек существует, панель обновляет ночной режим Noctalia.
 - В остальных случаях запускается `wlsunset`. В каталоге уже лежит сборка `bin/wlsunset` для Linux x86_64.
 - На ARM или другой архитектуре установите системный `wlsunset`: скрипт автоматически выберет его вместо вложенного бинарника.
+
+## Батарея и режимы питания
+
+Заряд, состояние, время до полной зарядки и здоровье аккумулятора читаются напрямую из `/sys/class/power_supply`. На компьютере без батареи панель показывает прочерк и сообщение `No battery detected`.
+
+Кнопки `Eco`, `Balance` и `Turbo` через D-Bus переключают профили `power-saver`, `balanced` и `performance` в power-profiles-daemon. Пакет `power-profiles-daemon` включён в `dependencies.txt`. Доступность Turbo зависит от оборудования и драйвера компьютера.
 
 ## Блокировка экрана
 

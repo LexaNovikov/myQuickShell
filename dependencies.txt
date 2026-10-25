@@ -8,6 +8,7 @@ pipewire
 pipewire-pulse
 wireplumber
 libpulse
+power-profiles-daemon
 perl
 curl
 fontconfig
