@@ -52,6 +52,32 @@ sub display_name {
         // $fallback;
 }
 
+sub set_default_device {
+    my ($kind, $name) = @_;
+    return 0 if !defined $name || $name eq '';
+
+    my ($set_command, $stream_command, $move_command) = $kind eq 'output'
+        ? ('set-default-sink', 'sink-inputs', 'move-sink-input')
+        : ('set-default-source', 'source-outputs', 'move-source-output');
+
+    system 'pactl', $set_command, $name;
+    return 0 if $? != 0;
+
+    my $streams = decode_list('pactl', '--format=json', 'list', $stream_command);
+    for my $stream (@$streams) {
+        next unless defined $stream->{index};
+        system 'pactl', $move_command, $stream->{index}, $name;
+    }
+    return 1;
+}
+
+if (@ARGV) {
+    my ($action, $name) = @ARGV;
+    exit(set_default_device('output', $name) ? 0 : 1) if $action eq 'set-default-output';
+    exit(set_default_device('input', $name) ? 0 : 1) if $action eq 'set-default-input';
+    exit 2;
+}
+
 my $default_sink = command_output('pactl', 'get-default-sink');
 my $default_source = command_output('pactl', 'get-default-source');
 $default_sink =~ s/\s+$//;
@@ -63,6 +89,29 @@ my $inputs = decode_list('pactl', '--format=json', 'list', 'sink-inputs');
 
 my $sink = (grep { ($_->{name} // '') eq $default_sink } @$sinks)[0] // $sinks->[0];
 my $source = (grep { ($_->{name} // '') eq $default_source } @$sources)[0] // $sources->[0];
+
+my @outputs = map {
+    {
+        id => $_->{name} // '',
+        name => display_name($_, 'Audio output'),
+        active => ($_->{name} // '') eq $default_sink ? JSON::PP::true : JSON::PP::false
+    }
+} grep { ($_->{name} // '') ne '' } @$sinks;
+
+my @inputs = map {
+    {
+        id => $_->{name} // '',
+        name => display_name($_, 'Microphone'),
+        active => ($_->{name} // '') eq $default_source ? JSON::PP::true : JSON::PP::false
+    }
+} grep {
+    my $name = $_->{name} // '';
+    my $monitor_name = $_->{monitor_of_sink_name} // '';
+    $name ne '' && $name !~ /\.monitor$/ && $monitor_name eq ''
+} @$sources;
+
+@outputs = sort { ($b->{active} <=> $a->{active}) || lc($a->{name}) cmp lc($b->{name}) } @outputs;
+@inputs = sort { ($b->{active} <=> $a->{active}) || lc($a->{name}) cmp lc($b->{name}) } @inputs;
 
 my @apps;
 for my $input (@$inputs) {
@@ -90,6 +139,8 @@ my $payload = {
         name => $source ? display_name($source, 'Default microphone') : 'No microphone',
         volume => $source ? average_volume($source) : 0
     },
+    outputs => \@outputs,
+    inputs => \@inputs,
     apps => \@apps
 };
 

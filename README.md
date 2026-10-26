@@ -7,7 +7,7 @@
 - управление MPRIS-плеером через `playerctl`;
 - Wi-Fi через NetworkManager (`nmcli`);
 - Bluetooth через BlueZ (`bluetoothctl`);
-- громкость PipeWire/PulseAudio и громкость отдельных приложений;
+- выбор устройств ввода и вывода PipeWire/PulseAudio, общая громкость и громкость отдельных приложений;
 - яркость экрана через `brightnessctl`;
 - заряд, здоровье батареи и переключение профилей Eco/Balance/Turbo;
 - загрузка событий из приватной ссылки Google Calendar в формате iCalendar;

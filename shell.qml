@@ -1216,7 +1216,9 @@ ShellRoot {
                 id: controlCloseDelay
                 interval: 120
                 onTriggered: {
-                    if (!controlHoverHandler.hovered && controlCenter.pointerHoldCount === 0)
+                    if (!controlHoverHandler.hovered
+                            && controlCenter.pointerHoldCount === 0
+                            && !controlCenter.controlCloseSuppressed)
                         controlCenter.isOpen = false
                 }
             }
@@ -1232,6 +1234,7 @@ ShellRoot {
             property bool nightModeMenuOpen: false
             property bool powerMenuOpen: false
             property int pointerHoldCount: 0
+            property bool controlCloseSuppressed: false
             property bool wifiEnabled: false
             property string wifiDevice: "wlan0"
             property string wifiConnection: ""
@@ -1335,6 +1338,10 @@ ShellRoot {
                 ? Math.round(audioSource.audio.volume * 100)
                 : 0
             property var audioApps: []
+            property var audioOutputs: []
+            property var audioInputs: []
+            property bool audioOutputMenuOpen: false
+            property bool audioInputMenuOpen: false
             property bool audioAdjustmentActive: false
             readonly property int primaryFontSize: 16
             readonly property int secondaryFontSize: 13
@@ -1397,7 +1404,13 @@ ShellRoot {
                 if (!bluetoothConnectedQuery.running) bluetoothConnectedQuery.running = true
             }
 
+            function closeAudioDeviceMenus() {
+                audioOutputMenuOpen = false
+                audioInputMenuOpen = false
+            }
+
             function openWifiMenu() {
+                closeAudioDeviceMenus()
                 bluetoothMenuOpen = false
                 nightModeMenuOpen = false
                 powerMenuOpen = false
@@ -1411,7 +1424,7 @@ ShellRoot {
                 pointerHoldCount = Math.max(0, pointerHoldCount + (hold ? 1 : -1))
                 if (pointerHoldCount > 0)
                     controlCloseDelay.stop()
-                else if (!controlHoverHandler.hovered)
+                else if (!controlHoverHandler.hovered && !controlCloseSuppressed)
                     controlCloseDelay.restart()
             }
 
@@ -1513,6 +1526,7 @@ ShellRoot {
             }
 
             function openBluetoothMenu() {
+                closeAudioDeviceMenus()
                 wifiMenuOpen = false
                 nightModeMenuOpen = false
                 powerMenuOpen = false
@@ -1643,6 +1657,7 @@ ShellRoot {
             }
 
             function openNightModeMenu() {
+                closeAudioDeviceMenus()
                 wifiMenuOpen = false
                 bluetoothMenuOpen = false
                 powerMenuOpen = false
@@ -1650,6 +1665,7 @@ ShellRoot {
             }
 
             function openPowerMenu() {
+                closeAudioDeviceMenus()
                 wifiMenuOpen = false
                 bluetoothMenuOpen = false
                 nightModeMenuOpen = false
@@ -1695,8 +1711,32 @@ ShellRoot {
                 audioRefreshDelay.restart()
             }
 
+            function keepOpenAfterAudioDeviceSelection() {
+                controlCloseSuppressed = true
+                controlCloseDelay.stop()
+                audioDeviceSelectionRelease.restart()
+            }
+
+            function setAudioDevice(kind, deviceId) {
+                if (audioDeviceCommand.running || !deviceId) return
+                keepOpenAfterAudioDeviceSelection()
+                closeAudioDeviceMenus()
+                audioDeviceCommand.command = [
+                    Quickshell.shellPath("audio-status.pl"),
+                    kind === "output" ? "set-default-output" : "set-default-input",
+                    deviceId
+                ]
+                audioDeviceCommand.running = true
+            }
+
             onIsOpenChanged: {
-                if (isOpen) refreshSystemPanels()
+                if (isOpen) {
+                    refreshSystemPanels()
+                } else {
+                    audioDeviceSelectionRelease.stop()
+                    controlCloseSuppressed = false
+                    closeAudioDeviceMenus()
+                }
             }
 
             Process {
@@ -2136,6 +2176,8 @@ ShellRoot {
                     onStreamFinished: {
                         try {
                             let status = JSON.parse(this.text.trim())
+                            controlCenter.audioOutputs = status.outputs || []
+                            controlCenter.audioInputs = status.inputs || []
                             if (!controlCenter.audioAdjustmentActive)
                                 controlCenter.audioApps = status.apps || []
                         } catch (error) {
@@ -2146,6 +2188,20 @@ ShellRoot {
             }
 
             Process { id: audioSetCommand }
+
+            Process {
+                id: audioDeviceCommand
+                stderr: StdioCollector {
+                    onStreamFinished: {
+                        let error = this.text.trim()
+                        if (error !== "") console.warn("Could not change audio device:", error)
+                    }
+                }
+                onRunningChanged: {
+                    if (!running && !audioStatusQuery.running)
+                        audioStatusQuery.running = true
+                }
+            }
 
             Timer {
                 interval: 2000
@@ -2165,6 +2221,17 @@ ShellRoot {
                 onTriggered: {
                     controlCenter.audioAdjustmentActive = false
                     if (!audioStatusQuery.running) audioStatusQuery.running = true
+                }
+            }
+
+            Timer {
+                id: audioDeviceSelectionRelease
+                interval: 400
+                repeat: false
+                onTriggered: {
+                    controlCenter.controlCloseSuppressed = false
+                    if (!controlHoverHandler.hovered && controlCenter.pointerHoldCount === 0)
+                        controlCloseDelay.restart()
                 }
             }
 
@@ -2513,7 +2580,9 @@ ShellRoot {
 
                 // --- ПОЛЗУНОК ЗВУКА ---
                 Rectangle {
+                    id: audioBlock
                     width: parent.width; height: controlCenter.audioBlockHeight; radius: 24; color: "#161616"
+                    z: controlCenter.audioOutputMenuOpen || controlCenter.audioInputMenuOpen ? 10 : 0
                     Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
                     Text {
@@ -2522,12 +2591,63 @@ ShellRoot {
                         text: "Sound"; color: "#ffffff"
                         font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
-                    Text {
+                    Item {
+                        id: outputDeviceSelector
                         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 14; leftMargin: 120; rightMargin: 66 }
-                        text: controlCenter.compactAudioDeviceName(controlCenter.audioOutputName)
-                        color: "#777777"; elide: Text.ElideRight
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
-                        maximumLineCount: 1
+                        height: 18
+
+                        Text {
+                            id: outputDeviceName
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                            width: Math.min(implicitWidth, parent.width - 17)
+                            text: controlCenter.compactAudioDeviceName(controlCenter.audioOutputName)
+                            color: "#777777"; elide: Text.ElideRight
+                            font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                            maximumLineCount: 1
+                        }
+
+                        Canvas {
+                            anchors { left: outputDeviceName.right; verticalCenter: parent.verticalCenter; leftMargin: 5 }
+                            width: 10; height: 6
+                            property bool expanded: controlCenter.audioOutputMenuOpen
+                            onExpandedChanged: requestPaint()
+                            onPaint: {
+                                let ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = "#777777"
+                                ctx.lineWidth = 1.5
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                if (expanded) {
+                                    ctx.moveTo(1, 5)
+                                    ctx.lineTo(5, 1)
+                                    ctx.lineTo(9, 5)
+                                } else {
+                                    ctx.moveTo(1, 1)
+                                    ctx.lineTo(5, 5)
+                                    ctx.lineTo(9, 1)
+                                }
+                                ctx.stroke()
+                            }
+                        }
+
+                        MouseArea {
+                            id: outputDeviceSelectorMouse
+                            anchors.fill: parent
+                            property bool keepsPanelOpen: containsMouse || pressed
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onKeepsPanelOpenChanged: controlCenter.holdPanelOpen(keepsPanelOpen)
+                            Component.onDestruction: {
+                                if (keepsPanelOpen) controlCenter.holdPanelOpen(false)
+                            }
+                            onClicked: {
+                                controlCenter.audioInputMenuOpen = false
+                                controlCenter.audioOutputMenuOpen = controlCenter.audioOutputs.length > 0
+                                    && !controlCenter.audioOutputMenuOpen
+                            }
+                        }
                     }
                     Text {
                         anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 16 }
@@ -2590,12 +2710,63 @@ ShellRoot {
                         text: "Microphone"; color: "#ffffff"
                         font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
                     }
-                    Text {
+                    Item {
+                        id: inputDeviceSelector
                         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 72; leftMargin: 120; rightMargin: 66 }
-                        text: controlCenter.compactAudioDeviceName(controlCenter.audioInputName)
-                        color: "#777777"; elide: Text.ElideRight
-                        font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
-                        maximumLineCount: 1
+                        height: 18
+
+                        Text {
+                            id: inputDeviceName
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                            width: Math.min(implicitWidth, parent.width - 17)
+                            text: controlCenter.compactAudioDeviceName(controlCenter.audioInputName)
+                            color: "#777777"; elide: Text.ElideRight
+                            font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                            maximumLineCount: 1
+                        }
+
+                        Canvas {
+                            anchors { left: inputDeviceName.right; verticalCenter: parent.verticalCenter; leftMargin: 5 }
+                            width: 10; height: 6
+                            property bool expanded: controlCenter.audioInputMenuOpen
+                            onExpandedChanged: requestPaint()
+                            onPaint: {
+                                let ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = "#777777"
+                                ctx.lineWidth = 1.5
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                if (expanded) {
+                                    ctx.moveTo(1, 5)
+                                    ctx.lineTo(5, 1)
+                                    ctx.lineTo(9, 5)
+                                } else {
+                                    ctx.moveTo(1, 1)
+                                    ctx.lineTo(5, 5)
+                                    ctx.lineTo(9, 1)
+                                }
+                                ctx.stroke()
+                            }
+                        }
+
+                        MouseArea {
+                            id: inputDeviceSelectorMouse
+                            anchors.fill: parent
+                            property bool keepsPanelOpen: containsMouse || pressed
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onKeepsPanelOpenChanged: controlCenter.holdPanelOpen(keepsPanelOpen)
+                            Component.onDestruction: {
+                                if (keepsPanelOpen) controlCenter.holdPanelOpen(false)
+                            }
+                            onClicked: {
+                                controlCenter.audioOutputMenuOpen = false
+                                controlCenter.audioInputMenuOpen = controlCenter.audioInputs.length > 0
+                                    && !controlCenter.audioInputMenuOpen
+                            }
+                        }
                     }
                     Text {
                         anchors { top: parent.top; right: parent.right; topMargin: 72; rightMargin: 16 }
@@ -2722,6 +2893,164 @@ ShellRoot {
                         visible: controlCenter.audioApps.length === 0
                         text: "No active apps"
                         color: "#666666"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+
+                    Rectangle {
+                        id: outputDeviceMenu
+                        x: 112; y: 32
+                        width: 206
+                        height: Math.min(4, controlCenter.audioOutputs.length) * 30 + 8
+                        radius: 18
+                        color: "#080808"
+                        border.color: "#202020"
+                        border.width: 1
+                        clip: true
+                        z: 30
+                        property bool keepsPanelOpen: enabled && outputDeviceMenuHover.hovered
+                        enabled: controlCenter.audioOutputMenuOpen && controlCenter.audioOutputs.length > 0
+                        visible: enabled || opacity > 0
+                        opacity: enabled ? 1 : 0
+                        scale: enabled ? 1 : 0.94
+                        transformOrigin: Item.Top
+                        onKeepsPanelOpenChanged: controlCenter.holdPanelOpen(keepsPanelOpen)
+                        Component.onDestruction: {
+                            if (keepsPanelOpen) controlCenter.holdPanelOpen(false)
+                        }
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
+
+                        HoverHandler { id: outputDeviceMenuHover }
+
+                        ListView {
+                            id: outputDeviceList
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            model: controlCenter.audioOutputs
+                            interactive: count > 4
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: outputDeviceList.width
+                                height: 30
+                                radius: 14
+                                color: modelData.active
+                                    ? "#181818"
+                                    : (outputDeviceMouse.containsMouse ? "#121212" : "transparent")
+
+                                Text {
+                                    anchors { left: parent.left; right: activeOutputDot.left; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 8 }
+                                    text: parent.modelData.name
+                                    color: parent.modelData.active ? "#ffffff" : "#999999"
+                                    elide: Text.ElideRight
+                                    font.bold: true
+                                    font.family: "SF Pro Rounded"
+                                    font.pixelSize: controlCenter.secondaryFontSize
+                                }
+
+                                Rectangle {
+                                    id: activeOutputDot
+                                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
+                                    width: 6; height: 6; radius: 3
+                                    color: "#25d8a3"
+                                    visible: parent.modelData.active
+                                }
+
+                                MouseArea {
+                                    id: outputDeviceMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (parent.modelData.active) {
+                                            controlCenter.keepOpenAfterAudioDeviceSelection()
+                                            controlCenter.closeAudioDeviceMenus()
+                                        } else {
+                                            controlCenter.setAudioDevice("output", parent.modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: inputDeviceMenu
+                        x: 112; y: 90
+                        width: 206
+                        height: Math.min(4, controlCenter.audioInputs.length) * 30 + 8
+                        radius: 18
+                        color: "#080808"
+                        border.color: "#202020"
+                        border.width: 1
+                        clip: true
+                        z: 30
+                        property bool keepsPanelOpen: enabled && inputDeviceMenuHover.hovered
+                        enabled: controlCenter.audioInputMenuOpen && controlCenter.audioInputs.length > 0
+                        visible: enabled || opacity > 0
+                        opacity: enabled ? 1 : 0
+                        scale: enabled ? 1 : 0.94
+                        transformOrigin: Item.Top
+                        onKeepsPanelOpenChanged: controlCenter.holdPanelOpen(keepsPanelOpen)
+                        Component.onDestruction: {
+                            if (keepsPanelOpen) controlCenter.holdPanelOpen(false)
+                        }
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
+
+                        HoverHandler { id: inputDeviceMenuHover }
+
+                        ListView {
+                            id: inputDeviceList
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            model: controlCenter.audioInputs
+                            interactive: count > 4
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: inputDeviceList.width
+                                height: 30
+                                radius: 14
+                                color: modelData.active
+                                    ? "#181818"
+                                    : (inputDeviceMouse.containsMouse ? "#121212" : "transparent")
+
+                                Text {
+                                    anchors { left: parent.left; right: activeInputDot.left; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 8 }
+                                    text: parent.modelData.name
+                                    color: parent.modelData.active ? "#ffffff" : "#999999"
+                                    elide: Text.ElideRight
+                                    font.bold: true
+                                    font.family: "SF Pro Rounded"
+                                    font.pixelSize: controlCenter.secondaryFontSize
+                                }
+
+                                Rectangle {
+                                    id: activeInputDot
+                                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
+                                    width: 6; height: 6; radius: 3
+                                    color: "#25d8a3"
+                                    visible: parent.modelData.active
+                                }
+
+                                MouseArea {
+                                    id: inputDeviceMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (parent.modelData.active) {
+                                            controlCenter.keepOpenAfterAudioDeviceSelection()
+                                            controlCenter.closeAudioDeviceMenus()
+                                        } else {
+                                            controlCenter.setAudioDevice("input", parent.modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
