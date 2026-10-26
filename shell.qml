@@ -496,7 +496,11 @@ ShellRoot {
             readonly property bool notificationHasButtons: notificationButtons.length > 0 || notificationCanReply
             readonly property int targetHeight: expanded
                 ? 320
-                : (notificationVisible ? ((notificationHasButtons || notificationReplyOpen) ? 116 : 78) : 32)
+                : (notificationVisible
+                   ? Math.ceil(Math.max(56, notificationContentColumn.implicitHeight)
+                               + 20
+                               + ((notificationHasButtons || notificationReplyOpen) ? 38 : 0))
+                   : 32)
             readonly property var weekdayNames: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
             readonly property string todayKey: dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate())
             property string selectedDateKey: todayKey
@@ -568,6 +572,10 @@ ShellRoot {
                 let normalized = (value || "").replace(/\s+/g, " ").trim()
                 if (normalized.length <= limit) return normalized
                 return normalized.substring(0, Math.max(0, limit - 3)).trim() + "..."
+            }
+
+            function normalizedNotificationText(value) {
+                return (value || "").replace(/\s+/g, " ").trim()
             }
 
             function openNotificationReply() {
@@ -767,13 +775,13 @@ ShellRoot {
                 }
 
                 Column {
+                    id: notificationContentColumn
                     anchors {
                         left: parent.left
-                        right: parent.right
                         verticalCenter: parent.verticalCenter
                         leftMargin: 79
-                        rightMargin: 16
                     }
+                    width: 285
                     spacing: 2
                     anchors.verticalCenterOffset: island.notificationHasButtons ? -19 : 0
 
@@ -783,27 +791,29 @@ ShellRoot {
                             ? island.truncatedNotificationText(island.activeNotification.appName, 24)
                             : ""
                         color: "#777777"
-                        font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 11
+                        font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
                     }
                     Text {
                         width: parent.width
                         text: island.activeNotification
-                            ? island.truncatedNotificationText(island.activeNotification.summary, 28)
+                            ? island.normalizedNotificationText(island.activeNotification.summary)
                             : ""
                         color: "#ffffff"
-                        font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 14
+                        font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 16
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
                     }
                     Text {
                         width: parent.width
                         text: island.activeNotification
-                            ? island.truncatedNotificationText(island.activeNotification.body, 32)
+                            ? island.normalizedNotificationText(island.activeNotification.body)
                             : ""
                         color: "#aaaaaa"
-                        font.family: "SF Pro Rounded"; font.pixelSize: 12
+                        font.family: "SF Pro Rounded"; font.pixelSize: 14
+                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        maximumLineCount: 3
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
                         visible: text !== ""
@@ -836,7 +846,7 @@ ShellRoot {
                                 horizontalAlignment: Text.AlignHCenter
                                 text: island.truncatedNotificationText(parent.modelData.text, 26)
                                 color: "#d0d0d0"
-                                font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 11
+                                font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
                                 elide: Text.ElideRight
                                 textFormat: Text.PlainText
                             }
@@ -860,7 +870,7 @@ ShellRoot {
                             anchors.centerIn: parent
                             text: "Reply"
                             color: "#050505"
-                            font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 11
+                            font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -880,7 +890,7 @@ ShellRoot {
                         id: notificationReplyInput
                         anchors { left: parent.left; right: replySend.left; verticalCenter: parent.verticalCenter; leftMargin: 14; rightMargin: 10 }
                         color: "#ffffff"
-                        font.family: "SF Pro Rounded"; font.pixelSize: 12
+                        font.family: "SF Pro Rounded"; font.pixelSize: 13
                         clip: true
                         selectByMouse: true
                         enabled: island.notificationReplyOpen
@@ -920,7 +930,7 @@ ShellRoot {
                             anchors.centerIn: parent
                             text: "Send"
                             color: notificationReplyInput.text.trim() === "" ? "#777777" : "#050505"
-                            font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 10
+                            font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 11
                         }
                         MouseArea {
                             anchors.fill: parent
