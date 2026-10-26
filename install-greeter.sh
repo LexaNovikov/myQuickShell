@@ -66,6 +66,8 @@ case "$action" in
         fi
 
         install -m 755 "$source_dir/system/quickshell-greeter-session" /usr/local/bin/quickshell-greeter-session
+        install -d -m 755 /usr/local/libexec
+        install -m 755 "$source_dir/system/quickshell-greeter-password-mode" /usr/local/libexec/quickshell-greeter-password-mode
         install -m 644 "$source_dir/system/config.toml" /etc/greetd/config.toml
         install -m 644 "$source_dir/system/greetd.pam" /etc/pam.d/greetd
 

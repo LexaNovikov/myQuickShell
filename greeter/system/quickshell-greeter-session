@@ -3,10 +3,14 @@
 set -eu
 
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp/quickshell-greeter-$(id -u)}"
+auth_mode_dir="/tmp/quickshell-greeter-auth-$(id -u)"
 install -d -m 700 "$runtime_dir"
+install -d -m 700 "$auth_mode_dir"
+rm -f "$auth_mode_dir/password-mode"
 
 export XDG_RUNTIME_DIR="$runtime_dir"
 export QS_DISABLE_FILE_WATCHER=1
+export QS_GREETER_PASSWORD_MODE_FILE="$auth_mode_dir/password-mode"
 unset WAYLAND_DISPLAY DISPLAY
 
 if command -v dbus-run-session >/dev/null 2>&1; then

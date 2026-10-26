@@ -16,7 +16,39 @@ ShellRoot {
         : "Preview mode — authentication is disabled"
     property bool statusIsError: false
     property bool authenticating: false
+    property bool passwordSubmitting: false
+    property bool responsePending: false
+    property bool restartWithPassword: false
     property int resetGeneration: 0
+
+    function startFingerprintAuthentication() {
+        if (!Greetd.available || Greetd.state !== GreetdState.Inactive) return
+
+        pendingPassword = ""
+        responsePending = false
+        passwordSubmitting = false
+        authenticating = true
+        statusIsError = false
+        statusText = "Touch the fingerprint sensor or enter your password"
+        Greetd.createSession(userName)
+    }
+
+    function startPasswordAuthentication() {
+        if (!Greetd.available) return
+        if (Greetd.state !== GreetdState.Inactive) {
+            restartWithPassword = true
+            Greetd.cancelSession()
+            return
+        }
+
+        restartWithPassword = false
+        responsePending = false
+        authenticating = true
+        passwordSubmitting = true
+        statusIsError = false
+        statusText = "Checking password…"
+        Greetd.createSession(userName)
+    }
 
     function submit() {
         if (!Greetd.available) {
@@ -24,21 +56,36 @@ ShellRoot {
             statusText = "Preview mode — authentication is disabled"
             return
         }
-        if (authenticating || Greetd.state !== GreetdState.Inactive
-                || userName === "" || passwordText === "") return
+        if (passwordSubmitting || userName === "" || passwordText === "") return
 
         pendingPassword = passwordText
         passwordText = ""
-        authenticating = true
+        passwordSubmitting = true
         statusIsError = false
-        statusText = "Authenticating…"
-        Greetd.createSession(userName)
+        statusText = "Checking password…"
+
+        if (responsePending) {
+            responsePending = false
+            Greetd.respond(pendingPassword)
+            pendingPassword = ""
+            return
+        }
+
+        let markerPath = Quickshell.env("QS_GREETER_PASSWORD_MODE_FILE")
+        if (!markerPath) {
+            resetAuthentication("Password mode is not configured", true)
+            return
+        }
+        passwordModeMarker.command = ["touch", markerPath]
+        passwordModeMarker.running = true
     }
 
     function resetAuthentication(message, error) {
         pendingPassword = ""
         passwordText = ""
         authenticating = false
+        passwordSubmitting = false
+        responsePending = false
         statusIsError = error
         statusText = message
         resetGeneration++
@@ -68,17 +115,32 @@ ShellRoot {
                 greeterRoot.statusIsError = error
             }
             if (responseRequired) {
-                Greetd.respond(greeterRoot.pendingPassword)
-                greeterRoot.pendingPassword = ""
+                greeterRoot.responsePending = true
+                if (greeterRoot.pendingPassword !== "") {
+                    greeterRoot.responsePending = false
+                    Greetd.respond(greeterRoot.pendingPassword)
+                    greeterRoot.pendingPassword = ""
+                }
             }
         }
 
         function onAuthFailure(message) {
+            if (greeterRoot.restartWithPassword) {
+                passwordSessionRestart.restart()
+                return
+            }
+            let passwordFailed = greeterRoot.passwordSubmitting
             greeterRoot.resetAuthentication(
-                message !== "" ? message : "Authentication failed", true)
+                passwordFailed
+                    ? (message !== "" ? message : "Incorrect password")
+                    : "Fingerprint was not recognized — try again",
+                passwordFailed)
+            fingerprintRetry.restart()
         }
 
         function onReadyToLaunch() {
+            greeterRoot.responsePending = false
+            greeterRoot.restartWithPassword = false
             greeterRoot.statusIsError = false
             greeterRoot.statusText = "Starting Niri…"
             Greetd.launch(
@@ -92,8 +154,65 @@ ShellRoot {
         }
 
         function onError(error) {
+            if (greeterRoot.restartWithPassword) {
+                passwordSessionRestart.restart()
+                return
+            }
             greeterRoot.resetAuthentication(
                 error !== "" ? error : "greetd connection error", true)
+        }
+
+        function onStateChanged() {
+            if (Greetd.state === GreetdState.Inactive
+                    && greeterRoot.restartWithPassword)
+                passwordSessionRestart.restart()
+        }
+    }
+
+    Timer {
+        id: initialFingerprintStart
+        interval: 150
+        repeat: true
+        running: true
+        onTriggered: {
+            if (Greetd.available && Greetd.state === GreetdState.Inactive) {
+                stop()
+                greeterRoot.startFingerprintAuthentication()
+            }
+        }
+    }
+
+    Timer {
+        id: passwordSessionRestart
+        interval: 80
+        onTriggered: {
+            if (Greetd.state === GreetdState.Inactive)
+                greeterRoot.startPasswordAuthentication()
+            else
+                restart()
+        }
+    }
+
+    Timer {
+        id: fingerprintRetry
+        interval: 700
+        onTriggered: {
+            if (Greetd.state === GreetdState.Inactive)
+                greeterRoot.startFingerprintAuthentication()
+            else
+                restart()
+        }
+    }
+
+    Process {
+        id: passwordModeMarker
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) {
+                greeterRoot.resetAuthentication(
+                    "Could not switch to password authentication", true)
+                return
+            }
+            greeterRoot.startPasswordAuthentication()
         }
     }
 
@@ -271,7 +390,7 @@ ShellRoot {
                         echoMode: TextInput.Password
                         passwordCharacter: "•"
                         verticalAlignment: TextInput.AlignVCenter
-                        enabled: !greeterRoot.authenticating
+                        enabled: !greeterRoot.passwordSubmitting
                         focus: true
 
                         Keys.onPressed: event => {
@@ -284,7 +403,7 @@ ShellRoot {
                         Text {
                             anchors.fill: parent
                             verticalAlignment: Text.AlignVCenter
-                            text: greeterRoot.authenticating ? "Authenticating…" : "Password"
+                            text: greeterRoot.passwordSubmitting ? "Checking password…" : "Password"
                             color: "#666666"
                             font: passwordInput.font
                             visible: passwordInput.text.length === 0
@@ -316,7 +435,7 @@ ShellRoot {
                             id: loginMouse
                             anchors.fill: parent
                             enabled: greeterRoot.passwordText.length > 0
-                                && !greeterRoot.authenticating
+                                && !greeterRoot.passwordSubmitting
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: greeterRoot.submit()
