@@ -13,7 +13,8 @@
 - загрузка событий из приватной ссылки Google Calendar в формате iCalendar;
 - уведомления на пять секунд, действия уведомлений и inline reply;
 - ночной режим через Noctalia или `wlsunset`;
-- блокировка сеанса и сон через Noctalia либо systemd-logind.
+- собственный экран блокировки через `ext-session-lock-v1`, PAM-пароль и отпечаток пальца;
+- экран входа при загрузке в том же стиле через `greetd`, Cage и Quickshell.
 
 ## Требования
 
@@ -22,7 +23,7 @@
 - Quickshell 0.3.2 или новее.
 - Шрифт **SF Pro Rounded** для точного совпадения с дизайном. Без него Qt подставит системный шрифт.
 
-Пакеты перечислены в [`dependencies.txt`](dependencies.txt). Noctalia необязательна: без неё ночной режим использует вложенный `bin/wlsunset`, а блокировка отправляется через `loginctl`.
+Пакеты перечислены в [`dependencies.txt`](dependencies.txt). Noctalia необязательна и используется только для ночного режима; без неё запускается вложенный `bin/wlsunset`. Экран блокировки полностью реализован в Quickshell.
 
 ## Установка на Arch Linux / EndeavourOS
 
@@ -146,7 +147,90 @@ chmod 600 ~/.config/quickshell/google-calendar.url
 
 ## Блокировка экрана
 
-С Noctalia используются её команды блокировки. Без Noctalia вызывается `loginctl lock-session`; поэтому в сеансе должен быть запущен экран блокировки, который реагирует на сигнал systemd-logind. Команда сна выполняется через `systemctl suspend`.
+Панель использует собственный экран блокировки на Quickshell и не зависит от Noctalia. Он запускается отдельным процессом из каталога `lockscreen/` и блокирует Wayland-сессию через `ext-session-lock-v1`.
+
+- пароль проверяется через системный PAM-профиль `system-auth`;
+- отпечаток проверяется параллельно через `pam_fprintd`;
+- при выборе сна команда `systemctl suspend` запускается только после того, как композитор подтвердил защищённое состояние экрана;
+- при отсутствии `fprintd`, зарегистрированного отпечатка или поддерживаемого сенсора остаётся обычная разблокировка паролем.
+
+После установки `fprintd` зарегистрируйте отпечаток и проверьте его:
+
+```bash
+fprintd-enroll
+fprintd-verify
+```
+
+Для Niri рекомендуется назначить запуск locker-а на сочетание, разрешённое даже во время блокировки. Оно позволит повторно открыть интерфейс, если процесс lock screen аварийно завершится:
+
+```kdl
+binds {
+    Super+Alt+L allow-when-locked=true { spawn "bash" "-lc" "$HOME/.config/quickshell/session-action.sh lock"; }
+}
+```
+
+При аварии lock screen Niri намеренно не показывает рабочий стол: сессия остаётся защищённой однотонным фоном. В таком состоянии используйте сочетание выше либо запустите `session-action.sh lock` из другой TTY с правильным `WAYLAND_DISPLAY`.
+
+## Экран входа при загрузке
+
+В каталоге `greeter/` находится отдельный Quickshell-интерфейс для `greetd`. Он использует тот же шрифт, цвета и форму элементов, что панель и lock screen, но запускается до пользовательской сессии. После успешной аутентификации greeter запускает `/usr/bin/niri-session`.
+
+Сначала откройте безопасный preview в текущей сессии. Он не подключён к greetd, не принимает пароль и закрывается по `Esc`:
+
+```bash
+cd ~/.config/quickshell
+./install-greeter.sh preview
+```
+
+Пользователь `greeter` не имеет доступа к домашнему каталогу. Поэтому установщик автоматически копирует SF Pro из `~/.local/share/fonts/SF-Pro/` в `/usr/local/share/fonts/SF-Pro/` и обновляет системный кэш шрифтов.
+
+Установите greeter и назначьте greetd display manager-ом для следующей загрузки:
+
+```bash
+sudo ./install-greeter.sh install "$USER"
+sudo reboot
+```
+
+Установщик:
+
+- проверяет наличие `greetd`, Cage, Quickshell и `niri-session`;
+- сохраняет исходные `/etc/greetd/config.toml` и `/etc/pam.d/greetd` в `/etc/greetd/quickshell-backup/`;
+- копирует greeter в `/etc/greetd/quickshell-greeter/`, доступный системному пользователю `greeter`;
+- устанавливает SF Pro системно, чтобы шрифт был доступен до входа пользователя;
+- включает `greetd.service` вместо текущего display manager-а, не останавливая открытую графическую сессию;
+- записывает имя пользователя в конфигурацию; на экране входа оно показывается как фиксированная подпись без поля ввода;
+- запускает Cage без оконных декораций, поэтому у greeter-а нет рамки и кнопок управления окном.
+
+Если установлен `fprintd` и для выбранного пользователя зарегистрирован отпечаток, PAM сначала в течение трёх секунд ожидает сенсор, после чего переходит к паролю. На компьютере без сенсора вход по паролю продолжает работать.
+
+Чтобы перенести оформление на ноутбук, скопируйте весь каталог `~/.config/quickshell`, установите зависимости и шрифт, зарегистрируйте отпечаток, проверьте preview и выполните ту же команду установки:
+
+```bash
+sudo pacman -S --needed - < dependencies.txt
+fprintd-enroll
+fprintd-verify
+./install-greeter.sh preview
+sudo ./install-greeter.sh install "$USER"
+sudo reboot
+```
+
+После обновления `greeter/shell.qml` повторно выполните `sudo ./install-greeter.sh install "$USER"`, чтобы скопировать новую версию в `/etc/greetd`.
+
+### Возврат к SDDM
+
+Если greeter не запустился, перейдите в TTY через `Ctrl+Alt+F3`, войдите в систему и выполните:
+
+```bash
+cd ~/.config/quickshell
+sudo ./install-greeter.sh restore-sddm
+sudo reboot
+```
+
+Вернуть прежнюю конфигурацию greetd и PAM можно отдельно:
+
+```bash
+sudo ./install-greeter.sh restore-greetd-config
+```
 
 ## Разрешения
 
@@ -169,6 +253,11 @@ sudo usermod -aG video "$USER"
 | `night-mode-helper.sh` | Noctalia / wlsunset и расписание ночного режима |
 | `night-mode.json` | сохранённые параметры ночного режима |
 | `session-action.sh` | блокировка и сон |
+| `lockscreen/shell.qml` | отдельный безопасный экран блокировки |
+| `lockscreen/pam.d/fingerprint` | PAM-профиль проверки отпечатка |
+| `greeter/shell.qml` | экран входа через API greetd |
+| `greeter/system/` | шаблоны greetd, PAM и запуска через Cage |
+| `install-greeter.sh` | preview, установка greeter-а и возврат к SDDM |
 | `system-stats.sh` | загрузка процессора и оперативной памяти |
 | `assets/` | растровые глифы интерфейса |
 | `bin/wlsunset` | fallback для ночного режима на Linux x86_64 |
@@ -178,7 +267,9 @@ sudo usermod -aG video "$USER"
 ```bash
 cd ~/.config/quickshell
 qmllint shell.qml
-command -v qs playerctl nmcli bluetoothctl brightnessctl pactl perl curl
+qmllint lockscreen/shell.qml
+qmllint greeter/shell.qml
+command -v qs greetd cage niri-session playerctl nmcli bluetoothctl brightnessctl pactl perl curl fprintd-verify
 ```
 
 Затем проверьте плеер, Wi-Fi, Bluetooth, звук, яркость, календарь и уведомление с быстрым ответом. Если другой демон уведомлений уже запущен, завершите его перед запуском панели: владельцем интерфейса `org.freedesktop.Notifications` может быть только один процесс.

@@ -1,2 +1,5 @@
 # Private Google Calendar iCal URL
 google-calendar.url
+
+# Runtime request passed to the dedicated lock-screen process
+lockscreen/.request
