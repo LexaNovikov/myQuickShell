@@ -22,6 +22,8 @@ ShellRoot {
                 return
             }
 
+            island.hideSystemOsd()
+
             let advertisedActions = []
             for (let index = 0; index < notification.actions.length; ++index) {
                 let action = notification.actions[index]
@@ -472,6 +474,27 @@ ShellRoot {
             property var activeNotification: null
             property bool notificationReplyOpen: false
             property bool calendarHoverArmed: true
+            property bool systemOsdVisible: false
+            property string systemOsdKind: "volume"
+            property string systemOsdTitle: "Volume"
+            property int systemOsdValue: 0
+            property bool systemOsdMuted: false
+            property string systemOsdDetail: ""
+            readonly property var osdSinkAudio: Pipewire.defaultAudioSink
+                ? Pipewire.defaultAudioSink.audio : null
+            readonly property var osdSourceAudio: Pipewire.defaultAudioSource
+                ? Pipewire.defaultAudioSource.audio : null
+            property bool osdSinkInitialized: false
+            property int osdLastSinkVolume: -1
+            property bool osdLastSinkMuted: false
+            property bool osdSourceInitialized: false
+            property int osdLastSourceVolume: -1
+            property bool osdLastSourceMuted: false
+            property bool osdBrightnessInitialized: false
+            property int osdLastBrightness: -1
+            property bool osdLayoutInitialized: false
+            property int osdLastLayoutIndex: -1
+            property var osdLayoutNames: []
             readonly property bool notificationVisible: activeNotification !== null
             readonly property bool notificationCanReply: notificationVisible && activeNotification.hasInlineReply
             readonly property var notificationDefaultAction: {
@@ -500,7 +523,7 @@ ShellRoot {
                    ? Math.ceil(Math.max(56, notificationContentColumn.implicitHeight)
                                + 20
                                + ((notificationHasButtons || notificationReplyOpen) ? 38 : 0))
-                   : 32)
+                   : (systemOsdVisible ? 58 : 32))
             readonly property var weekdayNames: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
             readonly property string todayKey: dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate())
             property string selectedDateKey: todayKey
@@ -578,6 +601,72 @@ ShellRoot {
                 return (value || "").replace(/\s+/g, " ").trim()
             }
 
+            function revealSystemOsd(kind, title, value, muted) {
+                if (notificationVisible || notificationReplyOpen || expanded) return
+                systemOsdKind = kind
+                systemOsdTitle = title
+                systemOsdValue = Math.max(0, Math.min(100, Math.round(value)))
+                systemOsdMuted = muted
+                systemOsdDetail = ""
+                systemOsdVisible = true
+                systemOsdHideTimer.restart()
+            }
+
+            function revealKeyboardLayout(layoutName) {
+                if (notificationVisible || notificationReplyOpen || expanded) return
+                let normalized = (layoutName || "Unknown").trim()
+                systemOsdKind = "language"
+                systemOsdTitle = "Language"
+                systemOsdDetail = normalized
+                systemOsdMuted = false
+                systemOsdVisible = true
+                systemOsdHideTimer.restart()
+                console.info("Keyboard layout OSD:", normalized)
+            }
+
+            function hideSystemOsd() {
+                systemOsdHideTimer.stop()
+                systemOsdVisible = false
+            }
+
+            function updateOsdSink() {
+                if (!osdSinkAudio) {
+                    osdSinkInitialized = false
+                    return
+                }
+                let volume = Math.round(osdSinkAudio.volume * 100)
+                let muted = osdSinkAudio.muted
+                if (!osdSinkInitialized) {
+                    osdSinkInitialized = true
+                    osdLastSinkVolume = volume
+                    osdLastSinkMuted = muted
+                    return
+                }
+                if (volume === osdLastSinkVolume && muted === osdLastSinkMuted) return
+                osdLastSinkVolume = volume
+                osdLastSinkMuted = muted
+                revealSystemOsd("volume", muted ? "Sound muted" : "Volume", volume, muted)
+            }
+
+            function updateOsdSource() {
+                if (!osdSourceAudio) {
+                    osdSourceInitialized = false
+                    return
+                }
+                let volume = Math.round(osdSourceAudio.volume * 100)
+                let muted = osdSourceAudio.muted
+                if (!osdSourceInitialized) {
+                    osdSourceInitialized = true
+                    osdLastSourceVolume = volume
+                    osdLastSourceMuted = muted
+                    return
+                }
+                if (volume === osdLastSourceVolume && muted === osdLastSourceMuted) return
+                osdLastSourceVolume = volume
+                osdLastSourceMuted = muted
+                revealSystemOsd("microphone", muted ? "Microphone muted" : "Microphone", volume, muted)
+            }
+
             function openNotificationReply() {
                 if (!notificationCanReply) return
                 notificationReplyOpen = true
@@ -642,9 +731,29 @@ ShellRoot {
                 })
             }
 
-            width: expanded ? 650 : (notificationVisible ? 380 : 68)
+            function dismissActiveNotification() {
+                let notification = activeNotification
+                if (!notification) return
+                notificationTimeout.stop()
+                blockCalendarUntilPointerLeaves()
+                activeNotification = null
+                notificationReplyOpen = false
+                mainWindow.focusable = false
+                notificationFocusDelay.stop()
+                notificationReplyInput.text = ""
+                Qt.callLater(() => {
+                    try {
+                        if (notification && notification.tracked)
+                            notification.dismiss()
+                    } catch (error) {
+                        // The application already closed the notification.
+                    }
+                })
+            }
+
+            width: expanded ? 650 : (notificationVisible ? 380 : (systemOsdVisible ? 290 : 68))
             height: targetHeight
-            radius: expanded ? 34 : (notificationVisible ? 26 : 16)
+            radius: expanded ? 34 : (notificationVisible ? 26 : (systemOsdVisible ? 26 : 16))
             color: "#000000"
             clip: true
             onTargetHeightChanged: mainWindow.reserveIslandHeight(targetHeight)
@@ -710,6 +819,84 @@ ShellRoot {
                 }
             }
 
+            Timer {
+                id: systemOsdHideTimer
+                interval: 1000
+                onTriggered: island.systemOsdVisible = false
+            }
+
+            Connections {
+                target: island.osdSinkAudio
+                ignoreUnknownSignals: true
+                function onVolumeChanged() { island.updateOsdSink() }
+                function onMutedChanged() { island.updateOsdSink() }
+            }
+
+            Connections {
+                target: island.osdSourceAudio
+                ignoreUnknownSignals: true
+                function onVolumeChanged() { island.updateOsdSource() }
+                function onMutedChanged() { island.updateOsdSource() }
+            }
+
+            onOsdSinkAudioChanged: Qt.callLater(updateOsdSink)
+            onOsdSourceAudioChanged: Qt.callLater(updateOsdSource)
+
+            Process {
+                command: ["perl", Quickshell.shellPath("brightness-monitor.pl")]
+                running: true
+                stdout: SplitParser {
+                    onRead: data => {
+                        let value = parseInt(data.trim())
+                        if (isNaN(value)) return
+                        if (!island.osdBrightnessInitialized) {
+                            island.osdBrightnessInitialized = true
+                            island.osdLastBrightness = value
+                            return
+                        }
+                        if (value === island.osdLastBrightness) return
+                        island.osdLastBrightness = value
+                        island.revealSystemOsd("brightness", "Brightness", value, false)
+                    }
+                }
+            }
+
+            Process {
+                command: ["niri", "msg", "--json", "event-stream"]
+                running: true
+                stdout: SplitParser {
+                    onRead: data => {
+                        try {
+                            let event = JSON.parse(data)
+                            let changed = event.KeyboardLayoutsChanged
+                            if (changed && changed.keyboard_layouts) {
+                                let layouts = changed.keyboard_layouts
+                                island.osdLayoutNames = layouts.names || []
+                                island.osdLayoutInitialized = true
+                                island.osdLastLayoutIndex = layouts.current_idx
+                                return
+                            }
+
+                            let switched = event.KeyboardLayoutSwitched
+                            if (!switched) return
+                            let index = switched.idx
+                            if (!island.osdLayoutInitialized) {
+                                island.osdLayoutInitialized = true
+                                island.osdLastLayoutIndex = index
+                                return
+                            }
+                            if (index === island.osdLastLayoutIndex) return
+                            island.osdLastLayoutIndex = index
+                            let name = index >= 0 && index < island.osdLayoutNames.length
+                                ? island.osdLayoutNames[index] : "Unknown"
+                            island.revealKeyboardLayout(name)
+                        } catch (error) {
+                            // Ignore unrelated or partial IPC messages.
+                        }
+                    }
+                }
+            }
+
             Connections {
                 target: island.activeNotification
                 ignoreUnknownSignals: true
@@ -730,8 +917,79 @@ ShellRoot {
                 font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 16
 
                 text: Qt.formatTime(island.now, "HH:mm")
-                opacity: island.expanded || island.notificationVisible ? 0 : 1
+                opacity: island.expanded || island.notificationVisible || island.systemOsdVisible ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 140 } }
+            }
+
+            Item {
+                anchors.fill: parent
+                opacity: island.systemOsdVisible && !island.expanded
+                    && !island.notificationVisible ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+
+                Text {
+                    anchors { left: parent.left; leftMargin: 18 }
+                    y: 8
+                    text: island.systemOsdTitle
+                    visible: island.systemOsdKind !== "language"
+                    color: "#ffffff"
+                    font.family: "SF Pro Rounded"
+                    font.bold: true
+                    font.pixelSize: 14
+                }
+
+                Text {
+                    anchors { right: parent.right; rightMargin: 18 }
+                    y: 8
+                    text: island.systemOsdMuted ? "Off" : island.systemOsdValue + "%"
+                    visible: island.systemOsdKind !== "language"
+                    color: island.systemOsdMuted ? "#777777" : "#ffffff"
+                    font.family: "SF Pro Rounded"
+                    font.bold: true
+                    font.pixelSize: 13
+                }
+
+                Text {
+                    anchors {
+                        fill: parent
+                        leftMargin: 18
+                        rightMargin: 18
+                    }
+                    visible: island.systemOsdKind === "language"
+                    text: island.systemOsdDetail
+                    color: "#ffffff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    font.family: "SF Pro Rounded"
+                    font.bold: true
+                    font.pixelSize: 14
+                }
+
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        bottom: parent.bottom
+                        leftMargin: 18
+                        rightMargin: 18
+                        bottomMargin: 11
+                    }
+                    height: 8
+                    radius: 4
+                    color: "#252525"
+                    clip: true
+                    visible: island.systemOsdKind !== "language"
+
+                    Rectangle {
+                        width: island.systemOsdMuted ? 0
+                            : parent.width * island.systemOsdValue / 100
+                        height: parent.height
+                        radius: parent.radius
+                        color: "#25d8a3"
+                    }
+                }
             }
 
             Item {
@@ -781,7 +1039,7 @@ ShellRoot {
                         verticalCenter: parent.verticalCenter
                         leftMargin: 79
                     }
-                    width: 285
+                    width: 260
                     spacing: 2
                     anchors.verticalCenterOffset: island.notificationHasButtons ? -19 : 0
 
@@ -817,6 +1075,44 @@ ShellRoot {
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
                         visible: text !== ""
+                    }
+                }
+
+                Rectangle {
+                    anchors { top: parent.top; right: parent.right; topMargin: 8; rightMargin: 8 }
+                    width: 24
+                    height: 24
+                    radius: 12
+                    color: notificationCloseMouse.containsMouse ? "#242424" : "#161616"
+                    z: 10
+
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 10
+                        height: 10
+                        onPaint: {
+                            let ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = "#8d8d8d"
+                            ctx.lineWidth = 1.6
+                            ctx.lineCap = "round"
+                            ctx.beginPath()
+                            ctx.moveTo(1, 1)
+                            ctx.lineTo(9, 9)
+                            ctx.moveTo(9, 1)
+                            ctx.lineTo(1, 9)
+                            ctx.stroke()
+                        }
+                    }
+
+                    MouseArea {
+                        id: notificationCloseMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: island.dismissActiveNotification()
                     }
                 }
 
@@ -943,7 +1239,8 @@ ShellRoot {
 
             MouseArea {
                 anchors.fill: parent
-                enabled: !island.expanded && !island.notificationVisible && island.calendarHoverArmed
+                enabled: !island.expanded && !island.notificationVisible
+                    && !island.systemOsdVisible && island.calendarHoverArmed
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
                 onEntered: {
@@ -961,7 +1258,8 @@ ShellRoot {
                 onHoveredChanged: {
                     if (hovered) {
                         calendarCloseDelay.stop()
-                        if (island.calendarHoverArmed && !island.expanded && !island.notificationVisible) {
+                        if (island.calendarHoverArmed && !island.expanded
+                                && !island.notificationVisible && !island.systemOsdVisible) {
                             playerWidget.expanded = false
                             controlCenter.isOpen = false
                             island.selectedDateKey = island.todayKey
