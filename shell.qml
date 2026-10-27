@@ -1618,7 +1618,7 @@ ShellRoot {
             property bool batteryPresent: false
             property int batteryPercent: 0
             property string batteryStatus: "unknown"
-            property int batteryMinutesToFull: -1
+            property int batteryMinutes: -1
             property int batteryHealth: 0
             property string powerProfile: "balanced"
             readonly property var audioSink: Pipewire.defaultAudioSink
@@ -1984,11 +1984,15 @@ ShellRoot {
             function batteryTimeText() {
                 if (!batteryPresent) return "No battery detected"
                 if (batteryStatus === "full") return "Fully charged"
-                if (batteryStatus !== "charging" || batteryMinutesToFull < 0)
-                    return "Running on battery"
-                let hours = Math.floor(batteryMinutesToFull / 60)
-                let minutes = batteryMinutesToFull % 60
-                return "Full charge after  " + hours + "H " + minutes + "M"
+                if (batteryMinutes < 0)
+                    return batteryStatus === "charging" ? "Charging" : "Running on battery"
+                let hours = Math.floor(batteryMinutes / 60)
+                let minutes = batteryMinutes % 60
+                if (batteryStatus === "charging")
+                    return "Full charge after  " + hours + "H " + minutes + "M"
+                if (batteryStatus === "discharging")
+                    return "Battery empty after  " + hours + "H " + minutes + "M"
+                return "Running on battery"
             }
 
             function runSessionAction(action) {
@@ -2445,7 +2449,7 @@ ShellRoot {
                             controlCenter.batteryPresent = values[2] === "1"
                             controlCenter.batteryPercent = parseInt(values[3]) || 0
                             controlCenter.batteryStatus = values[4] || "unknown"
-                            controlCenter.batteryMinutesToFull = parseInt(values[5])
+                            controlCenter.batteryMinutes = parseInt(values[5])
                             controlCenter.batteryHealth = parseInt(values[6]) || 0
                             controlCenter.powerProfile = values[7] || "balanced"
                         }

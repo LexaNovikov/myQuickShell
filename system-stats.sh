@@ -71,6 +71,8 @@ if (( battery_present )); then
 
     if [[ "$battery_status" == "charging" ]] && (( rate > 0 && stored_full > stored_now )); then
         battery_minutes=$(((stored_full - stored_now) * 60 / rate))
+    elif [[ "$battery_status" == "discharging" ]] && (( rate > 0 && stored_now > 0 )); then
+        battery_minutes=$((stored_now * 60 / rate))
     fi
 fi
 
