@@ -20,6 +20,9 @@ ShellRoot {
     property bool responsePending: false
     property bool restartWithPassword: false
     property int resetGeneration: 0
+    property int exitAnimationGeneration: 0
+    property int restoreAnimationGeneration: 0
+    property bool launching: false
 
     function startFingerprintAuthentication() {
         if (!Greetd.available || Greetd.state !== GreetdState.Inactive) return
@@ -139,21 +142,22 @@ ShellRoot {
         }
 
         function onReadyToLaunch() {
+            if (greeterRoot.launching) return
             greeterRoot.responsePending = false
             greeterRoot.restartWithPassword = false
             greeterRoot.statusIsError = false
             greeterRoot.statusText = "Starting Niri…"
-            Greetd.launch(
-                ["/usr/bin/niri-session"],
-                [
-                    "XDG_SESSION_TYPE=wayland",
-                    "XDG_CURRENT_DESKTOP=niri",
-                    "XDG_SESSION_DESKTOP=niri"
-                ]
-            )
+            greeterRoot.launching = true
+            greeterRoot.exitAnimationGeneration++
+            launchAfterAnimation.restart()
         }
 
         function onError(error) {
+            let wasLaunching = greeterRoot.launching
+            greeterRoot.launching = false
+            launchAfterAnimation.stop()
+            if (wasLaunching)
+                greeterRoot.restoreAnimationGeneration++
             if (greeterRoot.restartWithPassword) {
                 passwordSessionRestart.restart()
                 return
@@ -166,6 +170,21 @@ ShellRoot {
             if (Greetd.state === GreetdState.Inactive
                     && greeterRoot.restartWithPassword)
                 passwordSessionRestart.restart()
+        }
+    }
+
+    Timer {
+        id: launchAfterAnimation
+        interval: 480
+        onTriggered: {
+            Greetd.launch(
+                ["/usr/bin/niri-session"],
+                [
+                    "XDG_SESSION_TYPE=wayland",
+                    "XDG_CURRENT_DESKTOP=niri",
+                    "XDG_SESSION_DESKTOP=niri"
+                ]
+            )
         }
     }
 
@@ -240,6 +259,14 @@ ShellRoot {
             Canvas {
                 id: backgroundCanvas
                 anchors.fill: parent
+                opacity: 0
+
+                NumberAnimation on opacity {
+                    from: 0
+                    to: 1
+                    duration: 700
+                    easing.type: Easing.OutCubic
+                }
 
                 onWidthChanged: requestPaint()
                 onHeightChanged: requestPaint()
@@ -306,12 +333,38 @@ ShellRoot {
             }
 
             Column {
+                id: clockBlock
                 anchors {
                     horizontalCenter: parent.horizontalCenter
                     top: parent.top
                     topMargin: parent.height * 0.155
                 }
                 spacing: 4
+                opacity: 0
+                transform: Translate { id: clockEnterOffset; y: -18 }
+
+                SequentialAnimation {
+                    running: true
+                    PauseAnimation { duration: 90 }
+                    ParallelAnimation {
+                        NumberAnimation {
+                            target: clockBlock
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: 280
+                            easing.type: Easing.OutCubic
+                        }
+                        NumberAnimation {
+                            target: clockEnterOffset
+                            property: "y"
+                            from: -18
+                            to: 0
+                            duration: 420
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -340,6 +393,31 @@ ShellRoot {
                 }
                 width: Math.min(380, parent.width - 48)
                 spacing: 10
+                opacity: 0
+                scale: 0.94
+
+                SequentialAnimation {
+                    running: true
+                    PauseAnimation { duration: 190 }
+                    ParallelAnimation {
+                        NumberAnimation {
+                            target: loginCard
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: 300
+                            easing.type: Easing.OutCubic
+                        }
+                        NumberAnimation {
+                            target: loginCard
+                            property: "scale"
+                            from: 0.94
+                            to: 1
+                            duration: 480
+                            easing.type: Easing.OutBack
+                        }
+                    }
+                }
 
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -382,9 +460,9 @@ ShellRoot {
                         }
                         text: greeterRoot.passwordText
                         onTextEdited: greeterRoot.passwordText = text
-                        color: "#ffffff"
-                        selectionColor: "#22cfa2"
-                        selectedTextColor: "#06110e"
+                        color: "transparent"
+                        selectionColor: "transparent"
+                        selectedTextColor: "transparent"
                         font.family: "SF Pro Rounded"
                         font.pixelSize: 15
                         echoMode: TextInput.Password
@@ -392,6 +470,7 @@ ShellRoot {
                         verticalAlignment: TextInput.AlignVCenter
                         enabled: !greeterRoot.passwordSubmitting
                         focus: true
+                        cursorDelegate: Item { width: 0; height: 0 }
 
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -408,6 +487,97 @@ ShellRoot {
                             font: passwordInput.font
                             visible: passwordInput.text.length === 0
                         }
+                    }
+
+                    Item {
+                        id: passwordDotsArea
+                        anchors {
+                            left: parent.left
+                            right: loginButton.left
+                            top: parent.top
+                            bottom: parent.bottom
+                            leftMargin: 21
+                            rightMargin: 10
+                        }
+                        clip: true
+
+                        function syncDots() {
+                            const wantedCount = greeterRoot.passwordText.length
+                            while (passwordDotsModel.count < wantedCount)
+                                passwordDotsModel.append({})
+                            while (passwordDotsModel.count > wantedCount)
+                                passwordDotsModel.remove(passwordDotsModel.count - 1)
+                        }
+
+                        ListModel {
+                            id: passwordDotsModel
+                        }
+
+                        ListView {
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                verticalCenter: parent.verticalCenter
+                            }
+                            height: 14
+                            orientation: ListView.Horizontal
+                            spacing: 8
+                            interactive: false
+                            model: passwordDotsModel
+
+                            delegate: Rectangle {
+                                required property int index
+                                width: 14
+                                height: 14
+                                radius: 7
+                                color: "#f2f2f2"
+                            }
+
+                            add: Transition {
+                                ParallelAnimation {
+                                    NumberAnimation {
+                                        property: "opacity"
+                                        from: 0
+                                        to: 1
+                                        duration: 90
+                                        easing.type: Easing.OutCubic
+                                    }
+                                    NumberAnimation {
+                                        property: "scale"
+                                        from: 0.25
+                                        to: 1
+                                        duration: 180
+                                        easing.type: Easing.OutBack
+                                    }
+                                }
+                            }
+
+                            remove: Transition {
+                                ParallelAnimation {
+                                    NumberAnimation {
+                                        property: "opacity"
+                                        from: 1
+                                        to: 0
+                                        duration: 100
+                                        easing.type: Easing.InCubic
+                                    }
+                                    NumberAnimation {
+                                        property: "scale"
+                                        from: 1
+                                        to: 0.25
+                                        duration: 130
+                                        easing.type: Easing.InCubic
+                                    }
+                                }
+                            }
+                        }
+
+                        Connections {
+                            target: greeterRoot
+                            function onPasswordTextChanged() { passwordDotsArea.syncDots() }
+                        }
+
+                        Component.onCompleted: syncDots()
                     }
 
                     Rectangle {
@@ -460,13 +630,27 @@ ShellRoot {
             }
 
             Row {
+                id: powerActions
                 anchors {
                     horizontalCenter: parent.horizontalCenter
                     bottom: parent.bottom
                     bottomMargin: Math.max(28, parent.height * 0.045)
                 }
                 spacing: 28
-                opacity: Greetd.available ? 1 : 0.55
+                opacity: 0
+
+                SequentialAnimation {
+                    running: true
+                    PauseAnimation { duration: 350 }
+                    NumberAnimation {
+                        target: powerActions
+                        property: "opacity"
+                        from: 0
+                        to: Greetd.available ? 1 : 0.55
+                        duration: 260
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 Repeater {
                     model: [
@@ -511,6 +695,111 @@ ShellRoot {
                 target: greeterRoot
                 function onResetGenerationChanged() {
                     passwordInput.forceActiveFocus(Qt.OtherFocusReason)
+                }
+                function onExitAnimationGenerationChanged() {
+                    greeterExitAnimation.restart()
+                }
+                function onRestoreAnimationGenerationChanged() {
+                    greeterRestoreAnimation.restart()
+                }
+            }
+
+            ParallelAnimation {
+                id: greeterExitAnimation
+
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: clockBlock
+                        property: "opacity"
+                        to: 0
+                        duration: 190
+                        easing.type: Easing.InCubic
+                    }
+                    NumberAnimation {
+                        target: clockEnterOffset
+                        property: "y"
+                        to: -14
+                        duration: 260
+                        easing.type: Easing.InCubic
+                    }
+                    NumberAnimation {
+                        target: loginCard
+                        property: "opacity"
+                        to: 0
+                        duration: 210
+                        easing.type: Easing.InCubic
+                    }
+                    NumberAnimation {
+                        target: loginCard
+                        property: "scale"
+                        to: 0.94
+                        duration: 280
+                        easing.type: Easing.InCubic
+                    }
+                    NumberAnimation {
+                        target: powerActions
+                        property: "opacity"
+                        to: 0
+                        duration: 150
+                    }
+                }
+
+                SequentialAnimation {
+                    PauseAnimation { duration: 110 }
+                    NumberAnimation {
+                        target: backgroundCanvas
+                        property: "opacity"
+                        to: 0
+                        duration: 330
+                        easing.type: Easing.InOutCubic
+                    }
+                }
+            }
+
+            ParallelAnimation {
+                id: greeterRestoreAnimation
+
+                NumberAnimation {
+                    target: backgroundCanvas
+                    property: "opacity"
+                    to: 1
+                    duration: 360
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: clockBlock
+                    property: "opacity"
+                    to: 1
+                    duration: 260
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: clockEnterOffset
+                    property: "y"
+                    to: 0
+                    duration: 340
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: loginCard
+                    property: "opacity"
+                    to: 1
+                    duration: 280
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: loginCard
+                    property: "scale"
+                    to: 1
+                    duration: 400
+                    easing.type: Easing.OutBack
+                }
+                NumberAnimation {
+                    target: powerActions
+                    property: "opacity"
+                    to: Greetd.available ? 1 : 0.55
+                    duration: 260
+                    easing.type: Easing.OutCubic
                 }
             }
 
