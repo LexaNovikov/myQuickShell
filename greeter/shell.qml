@@ -1,6 +1,7 @@
 //@ pragma ShellId quickshell-greeter
 
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Greetd
@@ -419,12 +420,40 @@ ShellRoot {
                     }
                 }
 
-                Rectangle {
+                Item {
+                    id: avatar
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(116, greeterWindow.height * 0.108)
                     height: width
-                    radius: width / 2
-                    color: "#28a98a"
+
+                    Image {
+                        id: avatarSource
+                        anchors.fill: parent
+                        source: Quickshell.shellPath("assets/avatar.jpg")
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                        smooth: true
+                        visible: false
+                    }
+
+                    OpacityMask {
+                        anchors.fill: parent
+                        source: avatarSource
+                        maskSource: Rectangle {
+                            width: avatar.width
+                            height: avatar.height
+                            radius: width / 2
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: "#28a98a"
+                    }
                 }
 
                 Text {
