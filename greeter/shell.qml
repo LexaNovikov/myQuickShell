@@ -1,7 +1,6 @@
 //@ pragma ShellId quickshell-greeter
 
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Greetd
@@ -426,24 +425,26 @@ ShellRoot {
                     width: Math.min(116, greeterWindow.height * 0.108)
                     height: width
 
-                    Image {
-                        id: avatarSource
+                    Canvas {
+                        id: avatarCanvas
                         anchors.fill: parent
-                        source: Quickshell.shellPath("assets/avatar.jpg")
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true
-                        smooth: true
-                        visible: false
-                    }
+                        property url imageSource: Quickshell.shellPath("assets/avatar.jpg")
 
-                    OpacityMask {
-                        anchors.fill: parent
-                        source: avatarSource
-                        maskSource: Rectangle {
-                            width: avatar.width
-                            height: avatar.height
-                            radius: width / 2
+                        onImageLoaded: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        Component.onCompleted: loadImage(imageSource)
+
+                        onPaint: {
+                            let ctx = getContext("2d")
+                            ctx.reset()
+                            if (!isImageLoaded(imageSource)) return
+                            ctx.save()
+                            ctx.beginPath()
+                            ctx.arc(width / 2, height / 2, Math.min(width, height) / 2, 0, Math.PI * 2)
+                            ctx.clip()
+                            ctx.drawImage(imageSource, 0, 0, width, height)
+                            ctx.restore()
                         }
                     }
 
