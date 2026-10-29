@@ -2742,6 +2742,11 @@ ShellRoot {
                             let path = lines[i].trim()
                             if (path !== "") paths.push(path)
                         }
+                        let previous = controlCenter.wallpapers
+                        let changed = paths.length !== previous.length
+                        for (let i = 0; !changed && i < paths.length; ++i)
+                            changed = paths[i] !== previous[i]
+                        if (!changed) return
                         controlCenter.wallpapers = paths
                         let selectedIndex = paths.indexOf(controlCenter.selectedWallpaper)
                         controlCenter.wallpaperCarouselIndex = selectedIndex >= 0 ? selectedIndex : 0
@@ -2939,6 +2944,7 @@ ShellRoot {
             Component.onCompleted: {
                 loadNightModeSettings()
                 loadPersonalizationSettings()
+                refreshWallpapers()
             }
 
             anchors.fill: controlWidget
@@ -4025,11 +4031,11 @@ ShellRoot {
                             readonly property real offset: controlCenter.wallpaperOffset(index, wallpaperCarousel.position)
                             readonly property real distance: Math.abs(offset)
                             readonly property real sizeFactor: Math.max(0, 1 - distance)
-                            width: 224 + 46 * sizeFactor
-                            height: 118 + 34 * sizeFactor
+                            width: 270
+                            height: 152
                             x: (wallpaperCarousel.width - width) / 2
-                                + offset * 285
-                            y: (wallpaperCarousel.height - height) / 2
+                                + offset * 261
+                            y: 0
                             z: 100 - distance
                             visible: x < wallpaperCarousel.width && x + width > 0
                             radius: 22
@@ -4037,9 +4043,9 @@ ShellRoot {
                             border.width: controlCenter.selectedWallpaper === modelData ? 2 : 0
                             border.color: shellRoot.accentColor
                             clip: true
-                            scale: wallpaperMouse.pressed ? 0.97 : 1
+                            scale: (0.82 + 0.18 * sizeFactor)
+                                * (wallpaperMouse.pressed ? 0.97 : 1)
 
-                            Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
                             Behavior on border.width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                             Behavior on border.color { ColorAnimation { duration: 180 } }
 
@@ -4051,8 +4057,8 @@ ShellRoot {
                                 Image {
                                     anchors.fill: parent
                                     source: wallpaperCard.modelData
-                                    sourceSize.width: 488
-                                    sourceSize.height: 284
+                                    sourceSize.width: 540
+                                    sourceSize.height: 304
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                     smooth: true
