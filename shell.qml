@@ -367,9 +367,9 @@ ShellRoot {
                     }
                 }
                 MouseArea {
+                    cursorShape: Qt.PointingHandCursor
                     anchors.fill: parent
                     enabled: !playerWidget.expanded
-                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         playerCloseDelay.stop()
                         island.expanded = false
@@ -381,6 +381,7 @@ ShellRoot {
 
             HoverHandler {
                 id: playerHoverHandler
+                cursorShape: Qt.ArrowCursor
                 onHoveredChanged: {
                     if (hovered && playerWidget.expanded) {
                         playerCloseDelay.stop()
@@ -446,6 +447,7 @@ ShellRoot {
                                 Behavior on color { ColorAnimation { duration: 140 } }
 
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
                                     anchors.margins: -5
                                     onClicked: playerWidget.sourceMenuOpen = !playerWidget.sourceMenuOpen
@@ -470,6 +472,7 @@ ShellRoot {
                                     height: 6; radius: 3; color: "#aaaaaa"
                                 }
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
                                     onClicked: (mouse) => {
                                         if (playerWidget.trackLength > 0) {
@@ -509,7 +512,7 @@ ShellRoot {
                                         ctx.fill()
                                     }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["previous"]); mprisCmd.running = true } }
+                                MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["previous"]); mprisCmd.running = true } }
                             }
                             Rectangle {
                                 width: 36; height: 36; radius: 18; color: "#222222"
@@ -539,7 +542,7 @@ ShellRoot {
                                         }
                                     }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["play-pause"]); mprisCmd.running = true } }
+                                MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["play-pause"]); mprisCmd.running = true } }
                             }
                             Item {
                                 width: 40; height: 40
@@ -561,7 +564,7 @@ ShellRoot {
                                         ctx.fill()
                                     }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["next"]); mprisCmd.running = true } }
+                                MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["next"]); mprisCmd.running = true } }
                             }
                         }
                     }
@@ -648,6 +651,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 id: sourceMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
@@ -809,6 +813,20 @@ ShellRoot {
                 systemOsdDetail = ""
                 systemOsdVisible = true
                 systemOsdHideTimer.restart()
+            }
+
+            function updateBatteryWarning(present, percent, status) {
+                if (!present || status !== "discharging" || isNaN(percent)) {
+                    controlCenter.lastDischargingBatteryPercent = -1
+                    return
+                }
+                let previous = controlCenter.lastDischargingBatteryPercent
+                controlCenter.lastDischargingBatteryPercent = percent
+                if (previous < 0 || percent >= previous) return
+                if (previous > 5 && percent <= 5)
+                    revealSystemOsd("battery", "Critical battery", percent, false)
+                else if (previous > 20 && percent <= 20)
+                    revealSystemOsd("battery", "Low battery", percent, false)
             }
 
             function revealKeyboardLayout(layoutName) {
@@ -1014,7 +1032,7 @@ ShellRoot {
 
             Timer {
                 id: systemOsdHideTimer
-                interval: 1000
+                interval: island.systemOsdKind === "battery" ? 4000 : 1000
                 onTriggered: island.systemOsdVisible = false
             }
 
@@ -1179,7 +1197,9 @@ ShellRoot {
                             : parent.width * island.systemOsdValue / 100
                         height: parent.height
                         radius: parent.radius
-                        color: shellRoot.accentColor
+                        color: island.systemOsdKind === "battery"
+                            ? (island.systemOsdValue <= 5 ? "#ed414b" : "#f0c45e")
+                            : shellRoot.accentColor
                     }
                 }
             }
@@ -1191,6 +1211,7 @@ ShellRoot {
                 Behavior on opacity { NumberAnimation { duration: 180 } }
 
                 MouseArea {
+                    cursorShape: Qt.PointingHandCursor
                     anchors.fill: parent
                     enabled: !island.notificationReplyOpen && island.notificationDefaultAction !== null
                     onClicked: island.invokeNotificationAction(island.notificationDefaultAction)
@@ -1300,10 +1321,10 @@ ShellRoot {
                     }
 
                     MouseArea {
+                        cursorShape: Qt.PointingHandCursor
                         id: notificationCloseMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
                         onClicked: island.dismissActiveNotification()
                     }
                 }
@@ -1339,6 +1360,7 @@ ShellRoot {
                                 textFormat: Text.PlainText
                             }
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 anchors.fill: parent
                                 onClicked: island.invokeNotificationAction(parent.modelData)
                             }
@@ -1361,6 +1383,7 @@ ShellRoot {
                             font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
                         }
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors.fill: parent
                             onClicked: island.openNotificationReply()
                         }
@@ -1421,6 +1444,7 @@ ShellRoot {
                             font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 11
                         }
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors.fill: parent
                             enabled: notificationReplyInput.text.trim() !== ""
                             onClicked: island.sendNotificationReply()
@@ -1430,10 +1454,10 @@ ShellRoot {
             }
 
             MouseArea {
+                cursorShape: Qt.PointingHandCursor
                 anchors.fill: parent
                 enabled: !island.expanded && !island.notificationVisible
                     && !island.systemOsdVisible && island.calendarHoverArmed
-                cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     calendarCloseDelay.stop()
                     playerWidget.expanded = false
@@ -1446,6 +1470,7 @@ ShellRoot {
 
             HoverHandler {
                 id: calendarHoverHandler
+                cursorShape: Qt.ArrowCursor
                 onHoveredChanged: {
                     if (hovered && island.expanded) {
                         calendarCloseDelay.stop()
@@ -1554,9 +1579,9 @@ ShellRoot {
                                 }
 
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
                                     enabled: calendarDay.modelData.inCurrentMonth
-                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: island.selectedDateKey = calendarDay.modelData.key
                                 }
                             }
@@ -1660,9 +1685,13 @@ ShellRoot {
                 Behavior on opacity { NumberAnimation { duration: 150 } }
             }
             MouseArea {
+                cursorShape: Qt.PointingHandCursor
                 anchors.fill: parent
                 enabled: !controlCenter.isOpen
-                cursorShape: Qt.PointingHandCursor
+                onPressed: {
+                    controlCenter.wifiToggleBlocked = true
+                    wifiToggleReadyDelay.restart()
+                }
                 onClicked: {
                     controlCloseDelay.stop()
                     controlCenter.wifiMenuOpen = false
@@ -1677,12 +1706,22 @@ ShellRoot {
             }
             HoverHandler {
                 id: controlHoverHandler
+                cursorShape: Qt.ArrowCursor
                 onHoveredChanged: {
                     if (hovered && controlCenter.isOpen) {
                         controlCloseDelay.stop()
                     } else if (!hovered && controlCenter.isOpen) {
                         controlCloseDelay.restart()
                     }
+                }
+            }
+
+            Timer {
+                id: wifiToggleReadyDelay
+                interval: 400
+                onTriggered: {
+                    if (!wifiPowerHover.hovered)
+                        controlCenter.wifiToggleBlocked = false
                 }
             }
 
@@ -1712,6 +1751,11 @@ ShellRoot {
             property int pointerHoldCount: 0
             property bool controlCloseSuppressed: false
             property bool wifiEnabled: false
+            property bool wifiToggleBlocked: false
+            readonly property bool wifiPowerReady: isOpen
+                && controlWidget.width >= 407
+                && controlWidget.height >= homeMenuHeight
+                && !wifiToggleBlocked
             property string wifiDevice: "wlan0"
             property string wifiConnection: ""
             property string wifiSsid: ""
@@ -1805,6 +1849,7 @@ ShellRoot {
             property int processorUsage: 0
             property bool batteryPresent: false
             property int batteryPercent: 0
+            property int lastDischargingBatteryPercent: -1
             property string batteryStatus: "unknown"
             property int batteryMinutes: -1
             property int batteryHealth: 0
@@ -2030,7 +2075,7 @@ ShellRoot {
             }
 
             function toggleWifi() {
-                if (wifiRadioCommand.running) return
+                if (wifiToggleBlocked || wifiRadioCommand.running) return
 
                 if (wifiEnabled) {
                     if (wifiConnection !== "") wifiLastConnection = wifiConnection
@@ -2834,15 +2879,27 @@ ShellRoot {
                         if (!isNaN(memory)) controlCenter.memoryUsedGiB = memory
                         if (!isNaN(processor)) controlCenter.processorUsage = processor
                         if (values.length >= 8) {
-                            controlCenter.batteryPresent = values[2] === "1"
-                            controlCenter.batteryPercent = parseInt(values[3]) || 0
-                            controlCenter.batteryStatus = values[4] || "unknown"
+                            let present = values[2] === "1"
+                            let percent = parseInt(values[3])
+                            let status = values[4] || "unknown"
+                            controlCenter.batteryPresent = present
+                            controlCenter.batteryPercent = isNaN(percent) ? 0 : percent
+                            controlCenter.batteryStatus = status
+                            island.updateBatteryWarning(present, percent, status)
                             controlCenter.batteryMinutes = parseInt(values[5])
                             controlCenter.batteryHealth = parseInt(values[6]) || 0
                             controlCenter.powerProfile = values[7] || "balanced"
                         }
                     }
                 }
+            }
+
+            Timer {
+                interval: 30000
+                running: true
+                repeat: true
+                triggeredOnStart: true
+                onTriggered: if (!systemStatsQuery.running) systemStatsQuery.running = true
             }
 
             Process {
@@ -2952,6 +3009,15 @@ ShellRoot {
             color: "transparent"
             clip: true
 
+            HoverHandler {
+                enabled: controlCenter.isOpen
+                cursorShape: Qt.ArrowCursor
+                onHoveredChanged: controlCenter.holdPanelOpen(hovered)
+                Component.onDestruction: {
+                    if (hovered) controlCenter.holdPanelOpen(false)
+                }
+            }
+
             Behavior on opacity { NumberAnimation { duration: 180 } }
 
             Column {
@@ -2975,35 +3041,33 @@ ShellRoot {
                                 width: 40; height: 40; radius: 20
                                 color: controlCenter.wifiEnabled ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
-                                Canvas {
-                                    anchors.centerIn: parent
-                                    width: 22; height: 22
-                                    property bool enabledState: controlCenter.wifiEnabled
-                                    onEnabledStateChanged: requestPaint()
-                                    onPaint: {
-                                        let ctx = getContext("2d")
-                                        ctx.reset()
-                                        ctx.strokeStyle = enabledState ? "#050505" : "#888888"
-                                        ctx.fillStyle = enabledState ? "#050505" : "#888888"
-                                        ctx.lineWidth = 2.2
-                                        ctx.lineCap = "round"
-                                        ctx.beginPath()
-                                        ctx.arc(11, 14.5, 9, Math.PI * 1.17, Math.PI * 1.83)
-                                        ctx.stroke()
-                                        ctx.beginPath()
-                                        ctx.arc(11, 14.5, 5.7, Math.PI * 1.17, Math.PI * 1.83)
-                                        ctx.stroke()
-                                        ctx.beginPath()
-                                        ctx.arc(11, 14.5, 2.5, Math.PI * 1.17, Math.PI * 1.83)
-                                        ctx.stroke()
-                                        ctx.beginPath()
-                                        ctx.arc(11, 16.5, 1.35, 0, Math.PI * 2)
-                                        ctx.fill()
+                                HoverHandler {
+                                    id: wifiPowerHover
+                                    onHoveredChanged: {
+                                        if (!hovered && !wifiToggleReadyDelay.running)
+                                            controlCenter.wifiToggleBlocked = false
                                     }
                                 }
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 21; height: 16
+                                    source: Quickshell.shellPath(controlCenter.wifiEnabled
+                                        ? "assets/wifi-glyph-on.png" : "assets/wifi-glyph-off.png")
+                                    sourceSize.width: 21; sourceSize.height: 16
+                                    smooth: true
+                                }
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
-                                    onClicked: controlCenter.toggleWifi()
+                                    enabled: controlCenter.wifiPowerReady
+                                    property bool pressStartedReady: false
+                                    onPressed: pressStartedReady = controlCenter.wifiPowerReady
+                                    onCanceled: pressStartedReady = false
+                                    onClicked: {
+                                        if (pressStartedReady && controlCenter.wifiPowerReady)
+                                            controlCenter.toggleWifi()
+                                        pressStartedReady = false
+                                    }
                                 }
                             }
                             Column {
@@ -3020,6 +3084,7 @@ ShellRoot {
                             }
                         }
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors { top: parent.top; right: parent.right; bottom: parent.bottom }
                             width: parent.width - 52
                             onClicked: controlCenter.openWifiMenu()
@@ -3055,6 +3120,7 @@ ShellRoot {
                                     }
                                 }
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
                                     onClicked: controlCenter.setNightModeForced(!controlCenter.nightModeForced)
                                 }
@@ -3071,6 +3137,7 @@ ShellRoot {
                             }
                         }
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors { top: parent.top; right: parent.right; bottom: parent.bottom }
                             width: parent.width - 52
                             onClicked: controlCenter.openNightModeMenu()
@@ -3107,6 +3174,7 @@ ShellRoot {
                         }
 
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors.fill: parent
                             onClicked: controlCenter.openPersonalizationMenu()
                         }
@@ -3150,6 +3218,7 @@ ShellRoot {
                                     }
                                 }
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
                                     onClicked: controlCenter.toggleBluetooth()
                                 }
@@ -3168,6 +3237,7 @@ ShellRoot {
                             }
                         }
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors { top: parent.top; right: parent.right; bottom: parent.bottom }
                             width: parent.width - 52
                             onClicked: controlCenter.openBluetoothMenu()
@@ -3232,6 +3302,7 @@ ShellRoot {
                         }
 
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors.fill: parent
                             onClicked: controlCenter.openPowerMenu()
                         }
@@ -3257,6 +3328,7 @@ ShellRoot {
                         }
 
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors.fill: parent
                             onClicked: controlCenter.runSessionAction("lock-and-suspend")
                         }
@@ -3269,6 +3341,13 @@ ShellRoot {
                     width: parent.width; height: controlCenter.audioBlockHeight; radius: 24; color: "#161616"
                     z: controlCenter.audioOutputMenuOpen || controlCenter.audioInputMenuOpen ? 10 : 0
                     Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    HoverHandler {
+                        cursorShape: Qt.ArrowCursor
+                        onHoveredChanged: controlCenter.holdPanelOpen(hovered)
+                        Component.onDestruction: {
+                            if (hovered) controlCenter.holdPanelOpen(false)
+                        }
+                    }
 
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
@@ -3318,11 +3397,11 @@ ShellRoot {
                         }
 
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             id: outputDeviceSelectorMouse
                             anchors.fill: parent
                             property bool keepsPanelOpen: containsMouse || pressed
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
                             onKeepsPanelOpenChanged: controlCenter.holdPanelOpen(keepsPanelOpen)
                             Component.onDestruction: {
                                 if (keepsPanelOpen) controlCenter.holdPanelOpen(false)
@@ -3381,6 +3460,7 @@ ShellRoot {
                             x: outputVolumeSlider.leftPadding + outputVolumeSlider.visualPosition * (outputVolumeSlider.availableWidth - width)
                             y: outputVolumeSlider.topPadding + (outputVolumeSlider.availableHeight - height) / 2
                             width: 22; height: 22; radius: 11; color: "#ffffff"
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
                         }
                         onPressedChanged: controlCenter.audioAdjustmentActive = pressed
                         onMoved: {
@@ -3437,11 +3517,11 @@ ShellRoot {
                         }
 
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             id: inputDeviceSelectorMouse
                             anchors.fill: parent
                             property bool keepsPanelOpen: containsMouse || pressed
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
                             onKeepsPanelOpenChanged: controlCenter.holdPanelOpen(keepsPanelOpen)
                             Component.onDestruction: {
                                 if (keepsPanelOpen) controlCenter.holdPanelOpen(false)
@@ -3500,6 +3580,7 @@ ShellRoot {
                             x: inputVolumeSlider.leftPadding + inputVolumeSlider.visualPosition * (inputVolumeSlider.availableWidth - width)
                             y: inputVolumeSlider.topPadding + (inputVolumeSlider.availableHeight - height) / 2
                             width: 22; height: 22; radius: 11; color: "#ffffff"
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
                         }
                         onPressedChanged: controlCenter.audioAdjustmentActive = pressed
                         onMoved: {
@@ -3562,6 +3643,7 @@ ShellRoot {
                                         x: appVolumeSlider.leftPadding + appVolumeSlider.visualPosition * (appVolumeSlider.availableWidth - width)
                                         y: appVolumeSlider.topPadding + (appVolumeSlider.availableHeight - height) / 2
                                         width: 10; height: 10; radius: 5; color: "#ffffff"
+                                        HoverHandler { cursorShape: Qt.PointingHandCursor }
                                     }
                                     onPressedChanged: controlCenter.audioAdjustmentActive = pressed
                                     onMoved: {
@@ -3642,10 +3724,10 @@ ShellRoot {
                                 }
 
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     id: outputDeviceMouse
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (parent.modelData.active) {
                                             controlCenter.keepOpenAfterAudioDeviceSelection()
@@ -3721,10 +3803,10 @@ ShellRoot {
                                 }
 
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     id: inputDeviceMouse
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (parent.modelData.active) {
                                             controlCenter.keepOpenAfterAudioDeviceSelection()
@@ -3742,6 +3824,13 @@ ShellRoot {
                 // --- ПОЛЗУНОК ДИСПЛЕЯ ---
                 Rectangle {
                     width: parent.width; height: 74; radius: 24; color: "#161616"
+                    HoverHandler {
+                        cursorShape: Qt.ArrowCursor
+                        onHoveredChanged: controlCenter.holdPanelOpen(hovered)
+                        Component.onDestruction: {
+                            if (hovered) controlCenter.holdPanelOpen(false)
+                        }
+                    }
 
                     Process { id: brightnessSet }
                     Process {
@@ -3812,6 +3901,7 @@ ShellRoot {
                             x: displaySlider.leftPadding + displaySlider.visualPosition * (displaySlider.availableWidth - width)
                             y: displaySlider.topPadding + (displaySlider.availableHeight - height) / 2
                             width: 22; height: 22; radius: 11; color: "#ffffff"
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
                         }
                         onMoved: {
                             let percent = Math.round(value * 100)
@@ -3863,6 +3953,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 anchors.fill: parent
                                 onClicked: controlCenter.personalizationMenuOpen = false
                             }
@@ -3901,6 +3992,7 @@ ShellRoot {
                                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     id: accentMouse
                                     anchors.fill: parent
                                     onClicked: {
@@ -3919,6 +4011,7 @@ ShellRoot {
                                 font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 34
                             }
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 anchors.fill: parent
                                 onClicked: controlCenter.toggleCustomAccent()
                             }
@@ -3979,6 +4072,7 @@ ShellRoot {
                         }
 
                         MouseArea {
+                            cursorShape: Qt.PointingHandCursor
                             anchors.fill: parent
                             enabled: customAccentField.acceptableInput
                             onClicked: controlCenter.setAccent(customAccentField.text)
@@ -4077,6 +4171,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 id: wallpaperMouse
                                 anchors.fill: parent
                                 z: 4
@@ -4115,7 +4210,7 @@ ShellRoot {
                             Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                         }
 
-                        MouseArea { anchors.fill: parent; onClicked: controlCenter.toggleSmartPalette() }
+                        MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: controlCenter.toggleSmartPalette() }
                     }
                 }
 
@@ -4170,7 +4265,7 @@ ShellRoot {
                             }
                         }
 
-                        MouseArea { anchors.fill: parent; onClicked: controlCenter.powerMenuOpen = false }
+                        MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: controlCenter.powerMenuOpen = false }
                     }
 
                     Row {
@@ -4264,6 +4359,7 @@ ShellRoot {
                                 }
 
                                 MouseArea {
+                                    cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
                                     onClicked: controlCenter.setPowerProfile(parent.modelData.profile)
                                 }
@@ -4368,7 +4464,7 @@ ShellRoot {
                             }
                         }
 
-                        MouseArea { anchors.fill: parent; onClicked: controlCenter.wifiMenuOpen = false }
+                        MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: controlCenter.wifiMenuOpen = false }
                     }
 
                     Column {
@@ -4460,6 +4556,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 id: savedNetworkMouse
                                 property bool keepsPanelOpen: containsMouse
                                 anchors.fill: parent
@@ -4531,6 +4628,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 id: newNetworkMouse
                                 property bool keepsPanelOpen: containsMouse
                                 anchors.fill: parent
@@ -4586,7 +4684,7 @@ ShellRoot {
                             }
                         }
 
-                        MouseArea { anchors.fill: parent; onClicked: controlCenter.bluetoothMenuOpen = false }
+                        MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: controlCenter.bluetoothMenuOpen = false }
                     }
 
                     Column {
@@ -4684,6 +4782,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 id: savedBluetoothMouse
                                 property bool keepsPanelOpen: containsMouse
                                 anchors.fill: parent
@@ -4756,6 +4855,7 @@ ShellRoot {
                             }
 
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 id: newBluetoothMouse
                                 property bool keepsPanelOpen: containsMouse
                                 anchors.fill: parent
@@ -4832,6 +4932,7 @@ ShellRoot {
                         x: nightWarmthSlider.leftPadding + nightWarmthSlider.visualPosition * (nightWarmthSlider.availableWidth - width)
                         y: nightWarmthSlider.topPadding + nightWarmthSlider.availableHeight / 2 - height / 2
                         width: 44; height: 44; radius: 22; color: "#ffffff"
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
                     }
 
                     onMoved: controlCenter.nightModeTemperature = Math.round(value / 100) * 100
@@ -4857,6 +4958,7 @@ ShellRoot {
                     }
 
                     MouseArea {
+                        cursorShape: Qt.PointingHandCursor
                         anchors.fill: parent
                         onClicked: controlCenter.setNightModeSchedule(!controlCenter.nightModeScheduleEnabled)
                     }
@@ -5003,13 +5105,14 @@ ShellRoot {
                             width: 58; height: 26; radius: 13; color: "transparent"
                             border.width: 1; border.color: "#404040"
                             Text { anchors.centerIn: parent; text: "Cancel"; color: "#aaaaaa"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize }
-                            MouseArea { anchors.fill: parent; onClicked: controlCenter.wifiPasswordPromptOpen = false }
+                            MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: controlCenter.wifiPasswordPromptOpen = false }
                         }
 
                         Rectangle {
                             width: 66; height: 26; radius: 13; color: shellRoot.accentColor
                             Text { anchors.centerIn: parent; text: "Connect"; color: "#050505"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize }
                             MouseArea {
+                                cursorShape: Qt.PointingHandCursor
                                 anchors.fill: parent
                                 onClicked: controlCenter.connectVisibleNetwork(controlCenter.wifiPendingSsid, wifiPasswordField.text)
                             }
