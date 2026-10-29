@@ -7,6 +7,9 @@ import Quickshell.Services.Notifications
 import Quickshell.Widgets
 
 ShellRoot {
+    id: shellRoot
+    property string accentColor: "#25d8a3"
+
     NotificationServer {
         id: notificationServer
         keepOnReload: false
@@ -40,7 +43,6 @@ ShellRoot {
             notification.tracked = true
             island.activeNotification = notification
             island.notificationReplyOpen = false
-            mainWindow.focusable = notification.hasInlineReply
             notificationFocusDelay.stop()
             notificationReplyInput.text = ""
             island.expanded = false
@@ -57,7 +59,9 @@ ShellRoot {
     PanelWindow {
         id: mainWindow
         anchors { top: true; left: true; right: true }
-        focusable: false
+        focusable: island.notificationCanReply
+            || (controlCenter.isOpen
+                && (controlCenter.wifiMenuOpen || controlCenter.personalizationMenuOpen))
 
         property int playerSurfaceHeight: 32
         property int islandSurfaceHeight: 32
@@ -136,7 +140,51 @@ ShellRoot {
             property real trackPosition: 0
             property real trackLength: 0
             property string trackStatus: "Stopped"
+            property var availablePlayers: []
+            property string selectedPlayer: ""
+            property bool sourceMenuOpen: false
             readonly property bool showCompactArtwork: trackStatus === "Playing" && trackArt !== ""
+            readonly property var playerChoices: {
+                let choices = [{ id: "", label: "Auto" }]
+                for (let i = 0; i < availablePlayers.length; ++i) {
+                    let player = availablePlayers[i]
+                    choices.push({ id: player, label: friendlyPlayerName(player) })
+                }
+                return choices
+            }
+            readonly property string selectedPlayerLabel: selectedPlayer === ""
+                ? "Auto" : friendlyPlayerName(selectedPlayer)
+
+            function friendlyPlayerName(player) {
+                let base = (player || "").split(".")[0]
+                let knownNames = {
+                    spotify: "Spotify",
+                    firefox: "Firefox",
+                    chromium: "Chromium",
+                    chrome: "Chrome",
+                    brave: "Brave",
+                    vlc: "VLC",
+                    mpv: "MPV"
+                }
+                let lower = base.toLowerCase()
+                if (knownNames[lower]) return knownNames[lower]
+                return base === "" ? "Auto" : base.charAt(0).toUpperCase() + base.slice(1)
+            }
+
+            function playerCommand(arguments) {
+                let command = ["playerctl"]
+                if (selectedPlayer !== "") command.push("--player", selectedPlayer)
+                return command.concat(arguments)
+            }
+
+            function selectPlayer(player) {
+                selectedPlayer = player
+                sourceMenuOpen = false
+                playerSourceFile.setText(player)
+                trackPosition = 0
+                refreshPlayerState()
+                refreshPlayerPosition()
+            }
 
             function refreshPlayerState() {
                 if (!mprisMeta.running) mprisMeta.running = true
@@ -156,10 +204,39 @@ ShellRoot {
                 return m + ":" + (s < 10 ? "0" : "") + s
             }
 
+            FileView {
+                id: playerSourceFile
+                path: Quickshell.shellPath("player-source.txt")
+                blockLoading: true
+                atomicWrites: true
+                printErrors: false
+            }
+
+            Process {
+                id: mprisPlayers
+                command: ["playerctl", "-l"]
+                running: true
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let players = []
+                        let seen = ({})
+                        let lines = this.text.trim().split("\n")
+                        for (let i = 0; i < lines.length; ++i) {
+                            let player = lines[i].trim()
+                            if (player !== "" && !seen[player]) {
+                                seen[player] = true
+                                players.push(player)
+                            }
+                        }
+                        playerWidget.availablePlayers = players
+                    }
+                }
+            }
+
             // 1. Метаданные (текст + обложка)
             Process {
                 id: mprisMeta
-                command: ["playerctl", "metadata", "--format", "{{title}}|||{{artist}}|||{{album}}|||{{mpris:artUrl}}|||{{mpris:length}}"]
+                command: playerWidget.playerCommand(["metadata", "--format", "{{title}}|||{{artist}}|||{{album}}|||{{mpris:artUrl}}|||{{mpris:length}}"])
                 running: true
                 stdout: StdioCollector {
                     onStreamFinished: {
@@ -187,7 +264,7 @@ ShellRoot {
             // 2. Независимо получаем статус (Играет/Пауза)
             Process {
                 id: mprisStatus
-                command: ["playerctl", "status"]
+                command: playerWidget.playerCommand(["status"])
                 running: true
                 stdout: StdioCollector {
                     onStreamFinished: playerWidget.trackStatus = this.text.trim() || "Stopped"
@@ -197,7 +274,7 @@ ShellRoot {
             // 3. Независимо получаем текущую позицию
             Process {
                 id: mprisPos
-                command: ["playerctl", "position"]
+                command: playerWidget.playerCommand(["position"])
                 running: true
                 stdout: StdioCollector {
                     onStreamFinished: playerWidget.trackPosition = (parseFloat(this.text.trim()) * 1000000) || 0
@@ -221,6 +298,11 @@ ShellRoot {
                 onTriggered: playerWidget.refreshPlayerState()
             }
 
+            Timer {
+                interval: 3000; running: true; repeat: true
+                onTriggered: if (!mprisPlayers.running) mprisPlayers.running = true
+            }
+
             // Позиция нужна часто только пока раскрыт играющий плеер.
             Timer {
                 interval: 500
@@ -230,9 +312,15 @@ ShellRoot {
                 onTriggered: playerWidget.refreshPlayerPosition()
             }
 
-            onExpandedChanged: if (expanded) refreshPlayerPosition()
+            onExpandedChanged: {
+                if (expanded) refreshPlayerPosition()
+                else sourceMenuOpen = false
+            }
             onTargetHeightChanged: mainWindow.reservePlayerHeight(targetHeight)
-            Component.onCompleted: mainWindow.reservePlayerHeight(targetHeight)
+            Component.onCompleted: {
+                selectedPlayer = playerSourceFile.text().trim()
+                mainWindow.reservePlayerHeight(targetHeight)
+            }
 
             width: expanded ? 360 : 32
             height: targetHeight
@@ -281,9 +369,8 @@ ShellRoot {
                 MouseArea {
                     anchors.fill: parent
                     enabled: !playerWidget.expanded
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                    onEntered: {
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
                         playerCloseDelay.stop()
                         island.expanded = false
                         controlCenter.isOpen = false
@@ -295,12 +382,9 @@ ShellRoot {
             HoverHandler {
                 id: playerHoverHandler
                 onHoveredChanged: {
-                    if (hovered) {
+                    if (hovered && playerWidget.expanded) {
                         playerCloseDelay.stop()
-                        island.expanded = false
-                        controlCenter.isOpen = false
-                        playerWidget.expanded = true
-                    } else {
+                    } else if (!hovered && playerWidget.expanded) {
                         playerCloseDelay.restart()
                     }
                 }
@@ -342,7 +426,32 @@ ShellRoot {
 
                         Text { text: playerWidget.trackTitle; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 16; elide: Text.ElideRight; width: parent.width }
                         Text { text: playerWidget.trackArtist; color: "#aaaaaa"; font.family: "SF Pro Rounded"; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
-                        Text { text: playerWidget.trackAlbum; color: "#666666"; font.family: "SF Pro Rounded"; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
+                        Item {
+                            width: parent.width; height: 15
+
+                            Text {
+                                anchors { left: parent.left; right: playerSourceLabel.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                text: playerWidget.trackAlbum
+                                color: "#666666"; font.family: "SF Pro Rounded"; font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                id: playerSourceLabel
+                                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                                text: playerWidget.selectedPlayerLabel + (playerWidget.sourceMenuOpen ? "  ⌃" : "  ⌄")
+                                color: playerWidget.sourceMenuOpen ? "#888888" : shellRoot.accentColor
+                                font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
+
+                                Behavior on color { ColorAnimation { duration: 140 } }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -5
+                                    onClicked: playerWidget.sourceMenuOpen = !playerWidget.sourceMenuOpen
+                                }
+                            }
+                        }
 
                         Item { height: 2; width: 1 }
 
@@ -365,7 +474,7 @@ ShellRoot {
                                     onClicked: (mouse) => {
                                         if (playerWidget.trackLength > 0) {
                                             let targetSec = (mouse.x / width) * (playerWidget.trackLength / 1000000)
-                                            mprisCmd.command = ["playerctl", "position", targetSec.toString()]
+                                            mprisCmd.command = playerWidget.playerCommand(["position", targetSec.toString()])
                                             mprisCmd.running = true
                                         }
                                     }
@@ -400,7 +509,7 @@ ShellRoot {
                                         ctx.fill()
                                     }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = ["playerctl", "previous"]; mprisCmd.running = true } }
+                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["previous"]); mprisCmd.running = true } }
                             }
                             Rectangle {
                                 width: 36; height: 36; radius: 18; color: "#222222"
@@ -430,7 +539,7 @@ ShellRoot {
                                         }
                                     }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = ["playerctl", "play-pause"]; mprisCmd.running = true } }
+                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["play-pause"]); mprisCmd.running = true } }
                             }
                             Item {
                                 width: 40; height: 40
@@ -452,7 +561,97 @@ ShellRoot {
                                         ctx.fill()
                                     }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = ["playerctl", "next"]; mprisCmd.running = true } }
+                                MouseArea { anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["next"]); mprisCmd.running = true } }
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    visible: playerWidget.sourceMenuOpen
+                    z: 10
+                    onClicked: playerWidget.sourceMenuOpen = false
+                }
+
+                Rectangle {
+                    id: playerSourceMenu
+                    readonly property int openHeight: Math.min(124, playerWidget.playerChoices.length * 28 + 8)
+                    anchors { top: parent.top; right: parent.right; topMargin: 32; rightMargin: 8 }
+                    width: 205
+                    height: playerWidget.sourceMenuOpen ? openHeight : 0
+                    radius: 18
+                    color: "#050505"
+                    border.width: 1
+                    border.color: "#202020"
+                    opacity: playerWidget.sourceMenuOpen ? 1 : 0
+                    visible: height > 0
+                    clip: true
+                    z: 11
+
+                    Behavior on height {
+                        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                    ListView {
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        model: playerWidget.playerChoices
+                        spacing: 2
+                        interactive: count > 4
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
+                            width: ListView.view.width
+                            height: 26
+                            radius: 12
+                            color: sourceMouse.containsMouse ? "#111111" : "transparent"
+                            opacity: playerWidget.sourceMenuOpen ? 1 : 0
+                            transform: Translate {
+                                y: playerWidget.sourceMenuOpen ? 0 : -4
+                                Behavior on y {
+                                    NumberAnimation {
+                                        duration: 180 + Math.min(3, index) * 25
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 140 + Math.min(3, index) * 25
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            Text {
+                                anchors { left: parent.left; right: sourceIndicator.left; leftMargin: 10; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                text: parent.modelData.label
+                                color: parent.modelData.id === playerWidget.selectedPlayer ? "#ffffff" : "#777777"
+                                font.family: "SF Pro Rounded"
+                                font.bold: parent.modelData.id === playerWidget.selectedPlayer
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+
+                                Behavior on color { ColorAnimation { duration: 140 } }
+                            }
+
+                            Rectangle {
+                                id: sourceIndicator
+                                anchors { right: parent.right; rightMargin: 9; verticalCenter: parent.verticalCenter }
+                                width: 6; height: 6; radius: 3
+                                color: shellRoot.accentColor
+                                visible: parent.modelData.id === playerWidget.selectedPlayer
+                            }
+
+                            MouseArea {
+                                id: sourceMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: playerWidget.selectPlayer(parent.modelData.id)
                             }
                         }
                     }
@@ -670,14 +869,12 @@ ShellRoot {
             function openNotificationReply() {
                 if (!notificationCanReply) return
                 notificationReplyOpen = true
-                mainWindow.focusable = true
                 notificationTimeout.stop()
                 notificationFocusDelay.restart()
             }
 
             function cancelNotificationReply() {
                 notificationReplyOpen = false
-                mainWindow.focusable = notificationCanReply
                 notificationFocusDelay.stop()
                 notificationReplyInput.text = ""
                 notificationTimeout.restart()
@@ -695,7 +892,6 @@ ShellRoot {
 
                 notificationTimeout.stop()
                 notificationReplyOpen = false
-                mainWindow.focusable = false
                 notificationFocusDelay.stop()
                 notificationReplyInput.text = ""
                 blockCalendarUntilPointerLeaves()
@@ -718,7 +914,6 @@ ShellRoot {
                 blockCalendarUntilPointerLeaves()
                 activeNotification = null
                 notificationReplyOpen = false
-                mainWindow.focusable = false
                 notificationFocusDelay.stop()
                 action.invoke()
                 Qt.callLater(() => {
@@ -738,7 +933,6 @@ ShellRoot {
                 blockCalendarUntilPointerLeaves()
                 activeNotification = null
                 notificationReplyOpen = false
-                mainWindow.focusable = false
                 notificationFocusDelay.stop()
                 notificationReplyInput.text = ""
                 Qt.callLater(() => {
@@ -803,7 +997,6 @@ ShellRoot {
                     island.blockCalendarUntilPointerLeaves()
                     island.activeNotification = null
                     island.notificationReplyOpen = false
-                    mainWindow.focusable = false
                     notificationFocusDelay.stop()
                     notificationReplyInput.text = ""
                     if (notification) notification.expire()
@@ -904,7 +1097,6 @@ ShellRoot {
                     island.blockCalendarUntilPointerLeaves()
                     island.activeNotification = null
                     island.notificationReplyOpen = false
-                    mainWindow.focusable = false
                     notificationFocusDelay.stop()
                     notificationReplyInput.text = ""
                     notificationTimeout.stop()
@@ -987,7 +1179,7 @@ ShellRoot {
                             : parent.width * island.systemOsdValue / 100
                         height: parent.height
                         radius: parent.radius
-                        color: "#25d8a3"
+                        color: shellRoot.accentColor
                     }
                 }
             }
@@ -1159,7 +1351,7 @@ ShellRoot {
                                / Math.max(1, notificationActionRow.buttonCount)
                         height: notificationActionRow.height
                         radius: 14
-                        color: "#25d8a3"
+                        color: shellRoot.accentColor
                         visible: island.notificationCanReply
 
                         Text {
@@ -1219,7 +1411,7 @@ ShellRoot {
                         id: replySend
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 3 }
                         width: 64; height: 22; radius: 11
-                        color: notificationReplyInput.text.trim() === "" ? "#262626" : "#25d8a3"
+                        color: notificationReplyInput.text.trim() === "" ? "#262626" : shellRoot.accentColor
                         Behavior on color { ColorAnimation { duration: 140 } }
 
                         Text {
@@ -1241,9 +1433,8 @@ ShellRoot {
                 anchors.fill: parent
                 enabled: !island.expanded && !island.notificationVisible
                     && !island.systemOsdVisible && island.calendarHoverArmed
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton
-                onEntered: {
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
                     calendarCloseDelay.stop()
                     playerWidget.expanded = false
                     controlCenter.isOpen = false
@@ -1256,19 +1447,11 @@ ShellRoot {
             HoverHandler {
                 id: calendarHoverHandler
                 onHoveredChanged: {
-                    if (hovered) {
+                    if (hovered && island.expanded) {
                         calendarCloseDelay.stop()
-                        if (island.calendarHoverArmed && !island.expanded
-                                && !island.notificationVisible && !island.systemOsdVisible) {
-                            playerWidget.expanded = false
-                            controlCenter.isOpen = false
-                            island.selectedDateKey = island.todayKey
-                            island.refreshCalendar()
-                            island.expanded = true
-                        }
-                    } else {
+                    } else if (!hovered) {
                         island.calendarHoverArmed = true
-                        calendarCloseDelay.restart()
+                        if (island.expanded) calendarCloseDelay.restart()
                     }
                 }
             }
@@ -1348,7 +1531,7 @@ ShellRoot {
                                     anchors.centerIn: parent
                                     width: 29; height: 29; radius: width / 2
                                     color: calendarDay.modelData.isToday
-                                           ? "#25d8a3"
+                                           ? shellRoot.accentColor
                                            : (calendarDay.modelData.key === island.selectedDateKey ? "#303030" : "transparent")
                                 }
 
@@ -1439,13 +1622,15 @@ ShellRoot {
         Rectangle {
             id: controlWidget
             readonly property int targetHeight: controlCenter.isOpen
-                ? (controlCenter.powerMenuOpen
+                ? (controlCenter.personalizationMenuOpen
+                    ? controlCenter.personalizationMenuHeight
+                    : (controlCenter.powerMenuOpen
                     ? controlCenter.powerMenuHeight
                     : (controlCenter.wifiMenuOpen
                     ? controlCenter.wifiMenuHeight
                     : (controlCenter.bluetoothMenuOpen
                         ? controlCenter.bluetoothMenuHeight
-                        : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : controlCenter.homeMenuHeight))))
+                        : (controlCenter.nightModeMenuOpen ? controlCenter.nightModeMenuHeight : controlCenter.homeMenuHeight)))))
                 : 32
             width: controlCenter.isOpen ? 408 : 32
             height: targetHeight
@@ -1477,14 +1662,14 @@ ShellRoot {
             MouseArea {
                 anchors.fill: parent
                 enabled: !controlCenter.isOpen
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton
-                onEntered: {
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
                     controlCloseDelay.stop()
                     controlCenter.wifiMenuOpen = false
                     controlCenter.bluetoothMenuOpen = false
                     controlCenter.nightModeMenuOpen = false
                     controlCenter.powerMenuOpen = false
+                    controlCenter.personalizationMenuOpen = false
                     island.expanded = false
                     playerWidget.expanded = false
                     controlCenter.isOpen = true
@@ -1493,18 +1678,9 @@ ShellRoot {
             HoverHandler {
                 id: controlHoverHandler
                 onHoveredChanged: {
-                    if (hovered) {
+                    if (hovered && controlCenter.isOpen) {
                         controlCloseDelay.stop()
-                        if (!controlCenter.isOpen) {
-                            controlCenter.wifiMenuOpen = false
-                            controlCenter.bluetoothMenuOpen = false
-                            controlCenter.nightModeMenuOpen = false
-                            controlCenter.powerMenuOpen = false
-                        }
-                        island.expanded = false
-                        playerWidget.expanded = false
-                        controlCenter.isOpen = true
-                    } else {
+                    } else if (!hovered && controlCenter.isOpen) {
                         controlCloseDelay.restart()
                     }
                 }
@@ -1516,7 +1692,8 @@ ShellRoot {
                 onTriggered: {
                     if (!controlHoverHandler.hovered
                             && controlCenter.pointerHoldCount === 0
-                            && !controlCenter.controlCloseSuppressed)
+                            && !controlCenter.controlCloseSuppressed
+                            && !controlCenter.wifiPasswordPromptOpen)
                         controlCenter.isOpen = false
                 }
             }
@@ -1531,6 +1708,7 @@ ShellRoot {
             property bool bluetoothMenuOpen: false
             property bool nightModeMenuOpen: false
             property bool powerMenuOpen: false
+            property bool personalizationMenuOpen: false
             property int pointerHoldCount: 0
             property bool controlCloseSuppressed: false
             property bool wifiEnabled: false
@@ -1605,6 +1783,16 @@ ShellRoot {
             readonly property int bluetoothMenuHeight: 32 + 52 + 8 + bluetoothSavedBlockHeight + 8 + bluetoothNewBlockHeight
             readonly property int nightModeMenuHeight: 210
             readonly property int powerMenuHeight: 368
+            readonly property int personalizationMenuHeight: customAccentOpen ? 504 : 448
+            property var wallpapers: []
+            property string wallpaperDirectory: ""
+            property string selectedWallpaper: ""
+            property string personalizationMessage: ""
+            property string customAccentText: shellRoot.accentColor
+            property int wallpaperCarouselIndex: 0
+            property bool smartPaletteEnabled: false
+            property bool customAccentOpen: false
+            readonly property var accentPalette: ["#25d8a3", "#e993dc", "#e2aa76", "#ed414b"]
             property bool nightModeForced: false
             property bool nightModeScheduleEnabled: false
             property bool nightModeActive: false
@@ -1654,6 +1842,120 @@ ShellRoot {
                 name = name.replace(/\s+(analog|digital|stereo|mono|аналоговый|аналоговое|цифровой|цифровое|стерео|моно).*$/i, "")
                 if (name.length <= 20) return name
                 return name.substring(0, 17).trim() + "..."
+            }
+
+            function wallpaperName(path) {
+                let parts = (path || "").split("/")
+                return parts.length > 0 ? parts[parts.length - 1] : ""
+            }
+
+            function wallpaperOffset(index, position) {
+                let count = wallpapers.length
+                if (count < 2) return index - position
+                let offset = index - position
+                while (offset > count / 2) offset -= count
+                while (offset < -count / 2) offset += count
+                return offset
+            }
+
+            function toggleCustomAccent() {
+                customAccentOpen = !customAccentOpen
+                if (customAccentOpen)
+                    Qt.callLater(() => customAccentField.forceActiveFocus(Qt.MouseFocusReason))
+            }
+
+            function selectWallpaper(index, path) {
+                if (!path || wallpaperApplyCommand.running) return
+                let offset = wallpaperOffset(index, wallpaperCarousel.position)
+                wallpaperCarouselIndex = index
+                wallpaperSlide.stop()
+                wallpaperSlide.from = wallpaperCarousel.position
+                wallpaperSlide.to = wallpaperCarousel.position + offset
+                wallpaperSlide.start()
+                selectedWallpaper = path
+                savePersonalizationSettings()
+                applyWallpaper(path)
+            }
+
+            function validAccent(value) {
+                return /^#[0-9a-fA-F]{6}$/.test((value || "").trim())
+            }
+
+            function savePersonalizationSettings() {
+                personalizationSettingsFile.setText(JSON.stringify({
+                    accent: shellRoot.accentColor,
+                    wallpaper: selectedWallpaper,
+                    smartPalette: smartPaletteEnabled
+                }, null, 2))
+            }
+
+            function loadPersonalizationSettings() {
+                let contents = personalizationSettingsFile.text().trim()
+                if (contents === "") return
+                try {
+                    let settings = JSON.parse(contents)
+                    if (validAccent(settings.accent || "")) {
+                        shellRoot.accentColor = settings.accent.toLowerCase()
+                        customAccentText = shellRoot.accentColor
+                    }
+                    selectedWallpaper = settings.wallpaper || ""
+                    smartPaletteEnabled = settings.smartPalette === true
+                    if (selectedWallpaper !== "")
+                        Qt.callLater(() => applyWallpaper(selectedWallpaper))
+                } catch (error) {
+                    personalizationMessage = "Could not read personalization settings"
+                }
+            }
+
+            function setAccent(value) {
+                let accent = (value || "").trim()
+                if (!validAccent(accent)) {
+                    personalizationMessage = "Use a color like #25d8a3"
+                    return
+                }
+                shellRoot.accentColor = accent.toLowerCase()
+                smartPaletteEnabled = false
+                customAccentOpen = false
+                customAccentText = shellRoot.accentColor
+                personalizationMessage = "Accent updated"
+                savePersonalizationSettings()
+            }
+
+            function refreshWallpapers() {
+                if (!wallpaperDirectoryQuery.running) wallpaperDirectoryQuery.running = true
+                if (!wallpaperListQuery.running) wallpaperListQuery.running = true
+            }
+
+            function applyWallpaper(path) {
+                if (!path || wallpaperApplyCommand.running) return
+                personalizationMessage = "Applying wallpaper…"
+                wallpaperApplyCommand.targetPath = path
+                wallpaperApplyCommand.command = [Quickshell.shellPath("wallpaper-helper.sh"), "set", path]
+                wallpaperApplyCommand.running = true
+            }
+
+            function toggleSmartPalette() {
+                smartPaletteEnabled = !smartPaletteEnabled
+                savePersonalizationSettings()
+                if (smartPaletteEnabled && selectedWallpaper !== "")
+                    updateAccentFromWallpaper(selectedWallpaper)
+            }
+
+            function updateAccentFromWallpaper(path) {
+                if (!path || wallpaperAccentQuery.running) return
+                wallpaperAccentQuery.command = [Quickshell.shellPath("wallpaper-helper.sh"), "accent", path]
+                wallpaperAccentQuery.running = true
+            }
+
+            function openPersonalizationMenu() {
+                closeAudioDeviceMenus()
+                wifiMenuOpen = false
+                bluetoothMenuOpen = false
+                nightModeMenuOpen = false
+                powerMenuOpen = false
+                personalizationMenuOpen = true
+                customAccentOpen = false
+                refreshWallpapers()
             }
 
             function splitNmcli(line) {
@@ -1712,6 +2014,7 @@ ShellRoot {
                 bluetoothMenuOpen = false
                 nightModeMenuOpen = false
                 powerMenuOpen = false
+                personalizationMenuOpen = false
                 wifiMenuOpen = true
                 refreshWifi()
                 if (wifiEnabled && !wifiRescanCommand.running)
@@ -1828,6 +2131,7 @@ ShellRoot {
                 wifiMenuOpen = false
                 nightModeMenuOpen = false
                 powerMenuOpen = false
+                personalizationMenuOpen = false
                 bluetoothMenuOpen = true
                 refreshBluetooth()
                 if (bluetoothEnabled && !bluetoothScanCommand.running)
@@ -1959,6 +2263,7 @@ ShellRoot {
                 wifiMenuOpen = false
                 bluetoothMenuOpen = false
                 powerMenuOpen = false
+                personalizationMenuOpen = false
                 nightModeMenuOpen = true
             }
 
@@ -1967,6 +2272,7 @@ ShellRoot {
                 wifiMenuOpen = false
                 bluetoothMenuOpen = false
                 nightModeMenuOpen = false
+                personalizationMenuOpen = false
                 powerMenuOpen = true
                 refreshSystemPanels()
             }
@@ -2410,6 +2716,83 @@ ShellRoot {
             }
 
             FileView {
+                id: personalizationSettingsFile
+                path: Quickshell.shellPath("personalization.json")
+                blockLoading: true
+                atomicWrites: true
+                printErrors: false
+            }
+
+            Process {
+                id: wallpaperDirectoryQuery
+                command: [Quickshell.shellPath("wallpaper-helper.sh"), "directory"]
+                stdout: StdioCollector {
+                    onStreamFinished: controlCenter.wallpaperDirectory = this.text.trim()
+                }
+            }
+
+            Process {
+                id: wallpaperListQuery
+                command: [Quickshell.shellPath("wallpaper-helper.sh"), "list"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let paths = []
+                        let lines = this.text.trim().split("\n")
+                        for (let i = 0; i < lines.length; ++i) {
+                            let path = lines[i].trim()
+                            if (path !== "") paths.push(path)
+                        }
+                        controlCenter.wallpapers = paths
+                        let selectedIndex = paths.indexOf(controlCenter.selectedWallpaper)
+                        controlCenter.wallpaperCarouselIndex = selectedIndex >= 0 ? selectedIndex : 0
+                        wallpaperSlide.stop()
+                        wallpaperCarousel.position = controlCenter.wallpaperCarouselIndex
+                    }
+                }
+            }
+
+            Process {
+                id: wallpaperAccentQuery
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let accent = this.text.trim()
+                        if (!controlCenter.validAccent(accent)) return
+                        shellRoot.accentColor = accent.toLowerCase()
+                        controlCenter.customAccentText = shellRoot.accentColor
+                        controlCenter.personalizationMessage = "Palette updated from wallpaper"
+                        controlCenter.savePersonalizationSettings()
+                    }
+                }
+            }
+
+            Process {
+                id: wallpaperApplyCommand
+                property string targetPath: ""
+                property string errorText: ""
+                stderr: StdioCollector {
+                    onStreamFinished: wallpaperApplyCommand.errorText = this.text.trim()
+                }
+                onRunningChanged: {
+                    if (running) errorText = ""
+                }
+                onExited: (exitCode, exitStatus) => {
+                    if (targetPath === "") return
+                    if (exitCode === 0) {
+                        controlCenter.selectedWallpaper = targetPath
+                        controlCenter.personalizationMessage = "Wallpaper applied"
+                        controlCenter.savePersonalizationSettings()
+                        if (controlCenter.smartPaletteEnabled)
+                            controlCenter.updateAccentFromWallpaper(targetPath)
+                    } else {
+                        controlCenter.personalizationMessage = errorText !== ""
+                            ? errorText.split("\n").pop()
+                            : "Could not apply wallpaper"
+                    }
+                    targetPath = ""
+                }
+            }
+
+            FileView {
                 id: nightModeSettingsFile
                 path: Quickshell.shellPath("night-mode.json")
                 blockLoading: true
@@ -2511,6 +2894,7 @@ ShellRoot {
                     && !controlCenter.wifiMenuOpen
                     && !controlCenter.bluetoothMenuOpen
                     && !controlCenter.nightModeMenuOpen
+                    && !controlCenter.personalizationMenuOpen
                 repeat: true
                 triggeredOnStart: true
                 onTriggered: controlCenter.refreshSystemPanels()
@@ -2552,7 +2936,10 @@ ShellRoot {
                 onTriggered: controlCenter.refreshNightModeActive()
             }
 
-            Component.onCompleted: loadNightModeSettings()
+            Component.onCompleted: {
+                loadNightModeSettings()
+                loadPersonalizationSettings()
+            }
 
             anchors.fill: controlWidget
             opacity: isOpen ? 1 : 0
@@ -2568,6 +2955,7 @@ ShellRoot {
                     && !controlCenter.bluetoothMenuOpen
                     && !controlCenter.nightModeMenuOpen
                     && !controlCenter.powerMenuOpen
+                    && !controlCenter.personalizationMenuOpen
 
                 // --- РЯД 1: Wi-Fi, Night mode ---
                 Row {
@@ -2579,25 +2967,18 @@ ShellRoot {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
                                 width: 40; height: 40; radius: 20
-                                color: controlCenter.wifiEnabled ? "#25d8a3" : "#262626"
+                                color: controlCenter.wifiEnabled ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
-                                Image {
-                                    anchors.centerIn: parent
-                                    width: 32; height: 32
-                                    visible: controlCenter.wifiEnabled
-                                    source: Quickshell.shellPath("assets/wifi-active.png")
-                                    sourceSize.width: 32; sourceSize.height: 32
-                                    smooth: true
-                                }
                                 Canvas {
                                     anchors.centerIn: parent
                                     width: 22; height: 22
-                                    visible: !controlCenter.wifiEnabled
+                                    property bool enabledState: controlCenter.wifiEnabled
+                                    onEnabledStateChanged: requestPaint()
                                     onPaint: {
                                         let ctx = getContext("2d")
                                         ctx.reset()
-                                        ctx.strokeStyle = "#888888"
-                                        ctx.fillStyle = "#888888"
+                                        ctx.strokeStyle = enabledState ? "#050505" : "#888888"
+                                        ctx.fillStyle = enabledState ? "#050505" : "#888888"
                                         ctx.lineWidth = 2.2
                                         ctx.lineCap = "round"
                                         ctx.beginPath()
@@ -2645,13 +3026,15 @@ ShellRoot {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
                                 width: 40; height: 40; radius: 20
-                                color: controlCenter.nightModeActive ? "#25d8a3" : "#262626"
+                                color: controlCenter.nightModeActive ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
                                 Canvas {
                                     anchors.centerIn: parent
                                     width: 22; height: 22
                                     property bool activeState: controlCenter.nightModeActive
+                                    property string accentColor: shellRoot.accentColor
                                     onActiveStateChanged: requestPaint()
+                                    onAccentColorChanged: requestPaint()
                                     onPaint: {
                                         let ctx = getContext("2d")
                                         ctx.reset()
@@ -2659,7 +3042,7 @@ ShellRoot {
                                         ctx.beginPath()
                                         ctx.arc(10, 11, 7, 0, Math.PI * 2)
                                         ctx.fill()
-                                        ctx.fillStyle = activeState ? "#25d8a3" : "#262626"
+                                        ctx.fillStyle = activeState ? accentColor : "#262626"
                                         ctx.beginPath()
                                         ctx.arc(13.5, 8.5, 7, 0, Math.PI * 2)
                                         ctx.fill()
@@ -2696,36 +3079,30 @@ ShellRoot {
                             onPaint: {
                                 let ctx = getContext("2d")
                                 ctx.reset()
-                                ctx.fillStyle = "#ffffff"
                                 ctx.strokeStyle = "#ffffff"
-                                ctx.lineWidth = 2.2
+                                ctx.fillStyle = "#ffffff"
+                                ctx.lineWidth = 3.4
                                 ctx.lineCap = "round"
                                 ctx.lineJoin = "round"
 
                                 ctx.beginPath()
-                                ctx.moveTo(6.5, 10)
-                                ctx.lineTo(6.5, 7.5)
-                                ctx.arc(11, 7.5, 4.5, Math.PI, 0)
-                                ctx.lineTo(15.5, 10)
+                                ctx.moveTo(17.5, 3.5)
+                                ctx.lineTo(9.5, 11.5)
                                 ctx.stroke()
 
                                 ctx.beginPath()
-                                ctx.moveTo(6, 9)
-                                ctx.lineTo(16, 9)
-                                ctx.quadraticCurveTo(18, 9, 18, 11)
-                                ctx.lineTo(18, 18)
-                                ctx.quadraticCurveTo(18, 20, 16, 20)
-                                ctx.lineTo(6, 20)
-                                ctx.quadraticCurveTo(4, 20, 4, 18)
-                                ctx.lineTo(4, 11)
-                                ctx.quadraticCurveTo(4, 9, 6, 9)
+                                ctx.moveTo(10.5, 10.5)
+                                ctx.quadraticCurveTo(12.5, 13.5, 10.5, 16.5)
+                                ctx.quadraticCurveTo(8, 20, 3, 18.5)
+                                ctx.quadraticCurveTo(6, 16.5, 5.5, 13.5)
+                                ctx.quadraticCurveTo(7.5, 10.5, 10.5, 10.5)
                                 ctx.fill()
                             }
                         }
 
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: controlCenter.runSessionAction("lock")
+                            onClicked: controlCenter.openPersonalizationMenu()
                         }
                     }
                 }
@@ -2740,7 +3117,7 @@ ShellRoot {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
                                 width: 40; height: 40; radius: 20
-                                color: controlCenter.bluetoothEnabled ? "#25d8a3" : "#262626"
+                                color: controlCenter.bluetoothEnabled ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
                                 Canvas {
                                     anchors.centerIn: parent
@@ -2826,7 +3203,7 @@ ShellRoot {
                                     text: controlCenter.processorUsage
                                     color: controlCenter.processorUsage >= 85
                                         ? "#ff3048"
-                                        : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
+                                        : (controlCenter.processorUsage >= 60 ? "#f0c45e" : shellRoot.accentColor)
                                     font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
                                 }
                             }
@@ -2991,7 +3368,7 @@ ShellRoot {
                                 radius: 0
                                 topLeftRadius: parent.radius
                                 bottomLeftRadius: parent.radius
-                                color: "#25d8a3"
+                                color: shellRoot.accentColor
                             }
                         }
                         handle: Rectangle {
@@ -3110,7 +3487,7 @@ ShellRoot {
                                 radius: 0
                                 topLeftRadius: parent.radius
                                 bottomLeftRadius: parent.radius
-                                color: "#25d8a3"
+                                color: shellRoot.accentColor
                             }
                         }
                         handle: Rectangle {
@@ -3172,7 +3549,7 @@ ShellRoot {
                                             radius: 0
                                             topLeftRadius: parent.radius
                                             bottomLeftRadius: parent.radius
-                                            color: "#25d8a3"
+                                            color: shellRoot.accentColor
                                         }
                                     }
                                     handle: Rectangle {
@@ -3254,7 +3631,7 @@ ShellRoot {
                                     id: activeOutputDot
                                     anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
                                     width: 6; height: 6; radius: 3
-                                    color: "#25d8a3"
+                                    color: shellRoot.accentColor
                                     visible: parent.modelData.active
                                 }
 
@@ -3333,7 +3710,7 @@ ShellRoot {
                                     id: activeInputDot
                                     anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
                                     width: 6; height: 6; radius: 3
-                                    color: "#25d8a3"
+                                    color: shellRoot.accentColor
                                     visible: parent.modelData.active
                                 }
 
@@ -3385,6 +3762,7 @@ ShellRoot {
                             && !controlCenter.bluetoothMenuOpen
                             && !controlCenter.nightModeMenuOpen
                             && !controlCenter.powerMenuOpen
+                            && !controlCenter.personalizationMenuOpen
                         repeat: true
                         triggeredOnStart: true
                         onTriggered: if (!brightnessGet.running) brightnessGet.running = true
@@ -3421,7 +3799,7 @@ ShellRoot {
                                 radius: 0
                                 topLeftRadius: parent.radius
                                 bottomLeftRadius: parent.radius
-                                color: "#25d8a3"
+                                color: shellRoot.accentColor
                             }
                         }
                         handle: Rectangle {
@@ -3440,6 +3818,318 @@ ShellRoot {
             }
 
             Column {
+                id: personalizationMenu
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 8
+                visible: controlCenter.personalizationMenuOpen
+
+                Item {
+                    width: parent.width; height: 108
+
+                    Rectangle {
+                        anchors { top: parent.top; left: parent.left; right: parent.right }
+                        height: 52; radius: 26; color: "#161616"
+
+                        Rectangle {
+                            anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                            width: 40; height: 40; radius: 20
+                            color: shellRoot.accentColor
+
+                            Canvas {
+                                anchors.centerIn: parent
+                                width: 22; height: 22
+                                onPaint: {
+                                    let ctx = getContext("2d")
+                                    ctx.reset()
+                                    ctx.strokeStyle = "#050505"
+                                    ctx.lineWidth = 2.4
+                                    ctx.lineCap = "round"
+                                    ctx.lineJoin = "round"
+                                    ctx.beginPath()
+                                    ctx.moveTo(9, 5)
+                                    ctx.lineTo(3, 11)
+                                    ctx.lineTo(9, 17)
+                                    ctx.moveTo(3, 11)
+                                    ctx.lineTo(18, 11)
+                                    ctx.stroke()
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: controlCenter.personalizationMenuOpen = false
+                            }
+                        }
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 0
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Palette"; color: "#ffffff"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Path/To/Palette"; color: "#666666"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
+                            }
+                        }
+                    }
+
+                    Row {
+                        anchors { left: parent.left; bottom: parent.bottom; leftMargin: 6 }
+                        spacing: 18
+
+                        Repeater {
+                            model: controlCenter.accentPalette
+                            Rectangle {
+                                required property string modelData
+                                width: 40; height: 40; radius: 20
+                                color: modelData
+                                border.width: shellRoot.accentColor.toLowerCase() === modelData.toLowerCase() ? 2 : 0
+                                border.color: "#ffffff"
+                                scale: accentMouse.pressed ? 0.88 : 1
+
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+                                MouseArea {
+                                    id: accentMouse
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        controlCenter.customAccentOpen = false
+                                        controlCenter.setAccent(parent.modelData)
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 40; height: 40; radius: 20; color: "#161616"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "+"; color: "#050505"
+                                font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 34
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: controlCenter.toggleCustomAccent()
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: controlCenter.customAccentOpen ? 48 : 0
+                    radius: 22; color: "#161616"
+                    opacity: controlCenter.customAccentOpen ? 1 : 0
+                    visible: height > 0
+                    clip: true
+
+                    Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                    HoverHandler {
+                        onHoveredChanged: controlCenter.holdPanelOpen(hovered)
+                        Component.onDestruction: {
+                            if (hovered) controlCenter.holdPanelOpen(false)
+                        }
+                    }
+
+                    Text {
+                        anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                        text: "Custom color"
+                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+
+                    TextField {
+                        id: customAccentField
+                        anchors { right: applyAccentButton.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                        width: 104; height: 30
+                        text: controlCenter.customAccentText
+                        color: "#ffffff"; placeholderText: "#25d8a3"; placeholderTextColor: "#666666"
+                        font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                        horizontalAlignment: TextInput.AlignHCenter
+                        selectByMouse: true; padding: 0
+                        validator: RegularExpressionValidator { regularExpression: /^#[0-9a-fA-F]{6}$/ }
+                        background: Rectangle { radius: 15; color: "#090909"; border.width: 1; border.color: customAccentField.activeFocus ? shellRoot.accentColor : "#303030" }
+                        onTextEdited: controlCenter.customAccentText = text
+                        onAccepted: controlCenter.setAccent(text)
+                    }
+
+                    Rectangle {
+                        id: applyAccentButton
+                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                        width: 58; height: 30; radius: 15
+                        color: customAccentField.acceptableInput ? shellRoot.accentColor : "#262626"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Apply"
+                            color: customAccentField.acceptableInput ? "#050505" : "#777777"
+                            font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: customAccentField.acceptableInput
+                            onClicked: controlCenter.setAccent(customAccentField.text)
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 52; radius: 26; color: "#161616"
+
+                    Column {
+                        anchors.centerIn: parent
+                        width: parent.width - 28
+                        spacing: 0
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Wallpaper"; color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.primaryFontSize
+                        }
+                        Text {
+                            width: parent.width
+                            text: controlCenter.wallpaperDirectory || "Wallpaper directory"
+                            color: "#666666"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideMiddle
+                        }
+                    }
+                }
+
+                Item {
+                    id: wallpaperCarousel
+                    property real position: 0
+                    width: parent.width; height: 152
+                    clip: true
+
+                    NumberAnimation {
+                        id: wallpaperSlide
+                        target: wallpaperCarousel
+                        property: "position"
+                        duration: 380
+                        easing.type: Easing.OutCubic
+                    }
+
+                    Repeater {
+                        model: controlCenter.wallpapers
+
+                        delegate: Rectangle {
+                            id: wallpaperCard
+                            required property string modelData
+                            required property int index
+                            readonly property real offset: controlCenter.wallpaperOffset(index, wallpaperCarousel.position)
+                            readonly property real distance: Math.abs(offset)
+                            readonly property real sizeFactor: Math.max(0, 1 - distance)
+                            width: 224 + 46 * sizeFactor
+                            height: 118 + 34 * sizeFactor
+                            x: (wallpaperCarousel.width - width) / 2
+                                + offset * 285
+                            y: (wallpaperCarousel.height - height) / 2
+                            z: 100 - distance
+                            visible: x < wallpaperCarousel.width && x + width > 0
+                            radius: 22
+                            color: "#161616"
+                            border.width: controlCenter.selectedWallpaper === modelData ? 2 : 0
+                            border.color: shellRoot.accentColor
+                            clip: true
+                            scale: wallpaperMouse.pressed ? 0.97 : 1
+
+                            Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                            Behavior on border.width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            Behavior on border.color { ColorAnimation { duration: 180 } }
+
+                            ClippingRectangle {
+                                anchors.fill: parent
+                                radius: parent.radius
+                                color: "#161616"
+
+                                Image {
+                                    anchors.fill: parent
+                                    source: wallpaperCard.modelData
+                                    sourceSize.width: 488
+                                    sourceSize.height: 284
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    smooth: true
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: parent.radius
+                                color: "transparent"
+                                border.width: controlCenter.selectedWallpaper === parent.modelData ? 2 : 0
+                                border.color: shellRoot.accentColor
+                                z: 3
+
+                                Behavior on border.width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+
+                            MouseArea {
+                                id: wallpaperMouse
+                                anchors.fill: parent
+                                z: 4
+                                onClicked: controlCenter.selectWallpaper(parent.index, parent.modelData)
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: controlCenter.wallpapers.length === 0
+                        text: "No images in the wallpaper folder"
+                        color: "#777777"; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 36; radius: 18; color: "#161616"
+
+                    Text {
+                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                        text: "Smart Palette"
+                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+
+                    Rectangle {
+                        anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                        width: 48; height: 28; radius: 14
+                        color: controlCenter.smartPaletteEnabled ? shellRoot.accentColor : "#303030"
+                        Behavior on color { ColorAnimation { duration: 180 } }
+
+                        Rectangle {
+                            width: 24; height: 24; radius: 12; color: "#ffffff"
+                            x: controlCenter.smartPaletteEnabled ? parent.width - width - 2 : 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea { anchors.fill: parent; onClicked: controlCenter.toggleSmartPalette() }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 36; radius: 18; color: "#161616"
+                    Text {
+                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                        text: "Font"
+                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+                    Text {
+                        anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                        text: "SF Pro Rounded"
+                        color: "#777777"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+                }
+
+            }
+
+            Column {
                 id: powerMenu
                 anchors.fill: parent
                 anchors.margins: 16
@@ -3452,7 +4142,7 @@ ShellRoot {
                     Rectangle {
                         width: 40; height: 40; radius: 20
                         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                        color: "#25d8a3"
+                        color: shellRoot.accentColor
 
                         Canvas {
                             anchors.centerIn: parent
@@ -3526,7 +4216,7 @@ ShellRoot {
                                 text: controlCenter.processorUsage + "%"
                                 color: controlCenter.processorUsage >= 85
                                     ? "#ff3048"
-                                    : (controlCenter.processorUsage >= 60 ? "#f0c45e" : "#25d8a3")
+                                    : (controlCenter.processorUsage >= 60 ? "#f0c45e" : shellRoot.accentColor)
                                 font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
                             }
                         }
@@ -3557,7 +4247,7 @@ ShellRoot {
                                 required property var modelData
                                 readonly property bool selected: controlCenter.powerProfile === modelData.profile
                                 width: (parent.width - 8) / 3; height: 25; radius: 13
-                                color: selected ? "#25d8a3" : "#050505"
+                                color: selected ? shellRoot.accentColor : "#050505"
                                 Behavior on color { ColorAnimation { duration: 160 } }
 
                                 Text {
@@ -3599,7 +4289,7 @@ ShellRoot {
                         height: 22; radius: 11; color: "#050505"; clip: true
                         Rectangle {
                             width: controlCenter.batteryPresent ? parent.width * Math.min(100, controlCenter.batteryPercent) / 100 : 0
-                            height: parent.height; radius: 11; color: "#25d8a3"
+                            height: parent.height; radius: 11; color: shellRoot.accentColor
                             Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                         }
                     }
@@ -3632,7 +4322,7 @@ ShellRoot {
                         height: 22; radius: 11; color: "#050505"; clip: true
                         Rectangle {
                             width: controlCenter.batteryPresent ? parent.width * Math.min(100, controlCenter.batteryHealth) / 100 : 0
-                            height: parent.height; radius: 11; color: "#25d8a3"
+                            height: parent.height; radius: 11; color: shellRoot.accentColor
                             Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                         }
                     }
@@ -3650,7 +4340,7 @@ ShellRoot {
                     Rectangle {
                         width: 40; height: 40; radius: 20
                         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                        color: "#25d8a3"
+                        color: shellRoot.accentColor
 
                         Canvas {
                             anchors.centerIn: parent
@@ -3759,7 +4449,7 @@ ShellRoot {
                                 id: savedNetworkSwitch
                                 anchors { right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter }
                                 width: 36; height: 18; radius: 9
-                                color: savedNetworkRow.activeNetwork || savedNetworkRow.connectingNetwork ? "#25d8a3" : "#262626"
+                                color: savedNetworkRow.activeNetwork || savedNetworkRow.connectingNetwork ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
                             }
 
@@ -3830,7 +4520,7 @@ ShellRoot {
                                 id: newNetworkSwitch
                                 anchors { right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter }
                                 width: 36; height: 18; radius: 9
-                                color: newNetworkRow.connectingNetwork ? "#25d8a3" : "#262626"
+                                color: newNetworkRow.connectingNetwork ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
                             }
 
@@ -3868,7 +4558,7 @@ ShellRoot {
                     Rectangle {
                         width: 40; height: 40; radius: 20
                         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                        color: "#25d8a3"
+                        color: shellRoot.accentColor
 
                         Canvas {
                             anchors.centerIn: parent
@@ -3983,7 +4673,7 @@ ShellRoot {
                                 id: savedBluetoothSwitch
                                 anchors { right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter }
                                 width: 36; height: 18; radius: 9
-                                color: savedBluetoothRow.connectedDevice || savedBluetoothRow.pendingDevice ? "#25d8a3" : "#262626"
+                                color: savedBluetoothRow.connectedDevice || savedBluetoothRow.pendingDevice ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
                             }
 
@@ -4055,7 +4745,7 @@ ShellRoot {
                                 id: newBluetoothSwitch
                                 anchors { right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter }
                                 width: 36; height: 18; radius: 9
-                                color: newBluetoothRow.pairingDevice ? "#25d8a3" : "#262626"
+                                color: newBluetoothRow.pairingDevice ? shellRoot.accentColor : "#262626"
                                 Behavior on color { ColorAnimation { duration: 180 } }
                             }
 
@@ -4128,7 +4818,7 @@ ShellRoot {
                             radius: 0
                             topLeftRadius: parent.radius
                             bottomLeftRadius: parent.radius
-                            color: "#25d8a3"
+                            color: shellRoot.accentColor
                         }
                     }
 
@@ -4151,7 +4841,7 @@ ShellRoot {
                     id: nightScheduleSwitch
                     anchors { left: parent.left; bottom: parent.bottom; leftMargin: 14; bottomMargin: 13 }
                     width: 76; height: 40; radius: 20
-                    color: controlCenter.nightModeScheduleEnabled ? "#25d8a3" : "#262626"
+                    color: controlCenter.nightModeScheduleEnabled ? shellRoot.accentColor : "#262626"
                     Behavior on color { ColorAnimation { duration: 180 } }
 
                     Rectangle {
@@ -4236,8 +4926,29 @@ ShellRoot {
                 z: 20
 
                 onVisibleChanged: {
-                    if (visible) Qt.callLater(() => wifiPasswordField.forceActiveFocus())
-                    else wifiPasswordField.text = ""
+                    if (visible) {
+                        controlCloseDelay.stop()
+                        Qt.callLater(() => {
+                            if (!controlCenter.wifiPasswordPromptOpen) return
+                            let window = mainWindow.contentItem.window
+                            if (window) window.requestActivate()
+                            wifiPasswordFocusDelay.restart()
+                        })
+                    } else {
+                        wifiPasswordFocusDelay.stop()
+                        wifiPasswordField.text = ""
+                        if (!controlHoverHandler.hovered)
+                            controlCloseDelay.restart()
+                    }
+                }
+
+                Timer {
+                    id: wifiPasswordFocusDelay
+                    interval: 50
+                    onTriggered: {
+                        if (controlCenter.wifiPasswordPromptOpen)
+                            wifiPasswordField.forceActiveFocus(Qt.MouseFocusReason)
+                    }
                 }
 
                 MouseArea {
@@ -4269,9 +4980,13 @@ ShellRoot {
                         color: "#ffffff"
                         placeholderTextColor: "#666666"
                         font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                        enabled: controlCenter.wifiPasswordPromptOpen
+                        focus: controlCenter.wifiPasswordPromptOpen
+                        selectByMouse: true
                         leftPadding: 12; rightPadding: 12
-                        background: Rectangle { radius: 17; color: "#090909"; border.width: 1; border.color: wifiPasswordField.activeFocus ? "#25d8a3" : "#303030" }
+                        background: Rectangle { radius: 17; color: "#090909"; border.width: 1; border.color: wifiPasswordField.activeFocus ? shellRoot.accentColor : "#303030" }
                         onAccepted: controlCenter.connectVisibleNetwork(controlCenter.wifiPendingSsid, text)
+                        Keys.onEscapePressed: controlCenter.wifiPasswordPromptOpen = false
                     }
 
                     Row {
@@ -4286,7 +5001,7 @@ ShellRoot {
                         }
 
                         Rectangle {
-                            width: 66; height: 26; radius: 13; color: "#25d8a3"
+                            width: 66; height: 26; radius: 13; color: shellRoot.accentColor
                             Text { anchors.centerIn: parent; text: "Connect"; color: "#050505"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.smallFontSize }
                             MouseArea {
                                 anchors.fill: parent

@@ -3,3 +3,7 @@ google-calendar.url
 
 # Runtime request passed to the dedicated lock-screen process
 lockscreen/.request
+
+# Per-user UI choices
+player-source.txt
+personalization.json

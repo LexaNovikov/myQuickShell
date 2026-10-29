@@ -2,6 +2,8 @@ quickshell
 greetd
 cage
 playerctl
+awww
+imagemagick
 networkmanager
 bluez
 bluez-utils
