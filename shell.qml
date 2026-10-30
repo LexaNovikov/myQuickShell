@@ -175,6 +175,20 @@ ShellRoot {
         }
         color: "transparent"
         exclusiveZone: 38
+        mask: Region {
+            item: island
+            radius: island.radius
+
+            Region {
+                item: playerWidget
+                radius: playerWidget.radius
+            }
+
+            Region {
+                item: controlWidget
+                radius: controlWidget.radius
+            }
+        }
 
         // 1. Иконка плеера слева
         Rectangle {
@@ -897,6 +911,10 @@ ShellRoot {
                 console.info("Keyboard layout OSD:", normalized)
             }
 
+            function revealLockKey(key, enabled) {
+                revealSystemOsd("keylock", key === "capslock" ? "Caps Lock" : "Num Lock", 0, !enabled)
+            }
+
             function hideSystemOsd() {
                 systemOsdHideTimer.stop()
                 systemOsdVisible = false
@@ -1129,6 +1147,18 @@ ShellRoot {
             }
 
             Process {
+                command: ["perl", Quickshell.shellPath("lock-key-monitor.pl")]
+                running: true
+                stdout: SplitParser {
+                    onRead: data => {
+                        let match = data.trim().match(/^(capslock|numlock) ([01])$/)
+                        if (match)
+                            island.revealLockKey(match[1], match[2] === "1")
+                    }
+                }
+            }
+
+            Process {
                 command: ["niri", "msg", "--json", "event-stream"]
                 running: true
                 stdout: SplitParser {
@@ -1198,7 +1228,7 @@ ShellRoot {
                     anchors { left: parent.left; leftMargin: 18 }
                     y: 8
                     text: island.systemOsdTitle
-                    visible: island.systemOsdKind !== "language"
+                    visible: island.systemOsdKind !== "language" && island.systemOsdKind !== "keylock"
                     color: "#ffffff"
                     font.family: "SF Pro Rounded"
                     font.bold: true
@@ -1209,7 +1239,7 @@ ShellRoot {
                     anchors { right: parent.right; rightMargin: 18 }
                     y: 8
                     text: island.systemOsdMuted ? "Off" : island.systemOsdValue + "%"
-                    visible: island.systemOsdKind !== "language"
+                    visible: island.systemOsdKind !== "language" && island.systemOsdKind !== "keylock"
                     color: island.systemOsdMuted ? "#777777" : "#ffffff"
                     font.family: "SF Pro Rounded"
                     font.bold: true
@@ -1222,9 +1252,12 @@ ShellRoot {
                         leftMargin: 18
                         rightMargin: 18
                     }
-                    visible: island.systemOsdKind === "language"
-                    text: island.systemOsdDetail
-                    color: "#ffffff"
+                    visible: island.systemOsdKind === "language" || island.systemOsdKind === "keylock"
+                    text: island.systemOsdKind === "keylock"
+                        ? island.systemOsdTitle + (island.systemOsdMuted ? " Off" : " On")
+                        : island.systemOsdDetail
+                    color: island.systemOsdKind === "keylock" && island.systemOsdMuted
+                        ? "#777777" : "#ffffff"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -1246,7 +1279,7 @@ ShellRoot {
                     radius: 4
                     color: "#252525"
                     clip: true
-                    visible: island.systemOsdKind !== "language"
+                    visible: island.systemOsdKind !== "language" && island.systemOsdKind !== "keylock"
 
                     Rectangle {
                         width: island.systemOsdMuted ? 0
