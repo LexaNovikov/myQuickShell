@@ -110,7 +110,8 @@ ShellRoot {
         anchors { top: true; left: true; right: true }
         focusable: island.notificationCanReply
             || (controlCenter.isOpen
-                && (controlCenter.wifiMenuOpen || controlCenter.personalizationMenuOpen))
+                && (controlCenter.wifiMenuOpen || controlCenter.nightModeMenuOpen
+                    || controlCenter.personalizationMenuOpen))
 
         property int playerSurfaceHeight: 32
         property int islandSurfaceHeight: 32
@@ -2344,7 +2345,8 @@ ShellRoot {
                     nightModeScheduleEnabled ? "true" : "false",
                     nightModeTemperature.toString(),
                     nightModeFrom,
-                    nightModeTo
+                    nightModeTo,
+                    nightModeActive ? "true" : "false"
                 ]
                 nightModeApplyProcess.running = true
             }
@@ -2357,6 +2359,7 @@ ShellRoot {
 
             function setNightModeSchedule(enabled) {
                 nightModeScheduleEnabled = enabled
+                if (enabled) nightModeForced = false
                 saveNightModeSettings()
                 restartNightMode()
             }
@@ -3053,7 +3056,12 @@ ShellRoot {
                 running: true
                 repeat: true
                 triggeredOnStart: true
-                onTriggered: controlCenter.refreshNightModeActive()
+                onTriggered: {
+                    const wasActive = controlCenter.nightModeActive
+                    controlCenter.refreshNightModeActive()
+                    if (wasActive !== controlCenter.nightModeActive)
+                        controlCenter.restartNightMode()
+                }
             }
 
             Component.onCompleted: {
@@ -5036,19 +5044,24 @@ ShellRoot {
                     TextField {
                         id: nightFromField
                         width: 88; height: 22
-                        text: controlCenter.nightModeFrom
+                        text: controlCenter.nightModeFrom.slice(0, 5)
                         color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 15
                         horizontalAlignment: TextInput.AlignHCenter
                         selectByMouse: true; padding: 0
-                        validator: RegularExpressionValidator { regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/ }
-                        background: Rectangle { color: nightFromField.activeFocus ? "#161616" : "transparent"; radius: 8 }
+                        inputMethodHints: Qt.ImhPreferNumbers
+                        validator: RegularExpressionValidator { regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]$/ }
+                        background: Rectangle {
+                            color: "#161616"; radius: 8
+                            border.width: 1
+                            border.color: nightFromField.activeFocus ? shellRoot.accentColor : "#303030"
+                        }
                         onEditingFinished: {
                             if (acceptableInput) {
-                                controlCenter.nightModeFrom = text
+                                controlCenter.nightModeFrom = text + ":00"
                                 controlCenter.saveNightModeSettings()
                                 controlCenter.restartNightMode()
                             } else {
-                                text = controlCenter.nightModeFrom
+                                text = controlCenter.nightModeFrom.slice(0, 5)
                             }
                         }
                     }
@@ -5056,19 +5069,24 @@ ShellRoot {
                     TextField {
                         id: nightToField
                         width: 88; height: 22
-                        text: controlCenter.nightModeTo
+                        text: controlCenter.nightModeTo.slice(0, 5)
                         color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: 15
                         horizontalAlignment: TextInput.AlignHCenter
                         selectByMouse: true; padding: 0
-                        validator: RegularExpressionValidator { regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/ }
-                        background: Rectangle { color: nightToField.activeFocus ? "#161616" : "transparent"; radius: 8 }
+                        inputMethodHints: Qt.ImhPreferNumbers
+                        validator: RegularExpressionValidator { regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]$/ }
+                        background: Rectangle {
+                            color: "#161616"; radius: 8
+                            border.width: 1
+                            border.color: nightToField.activeFocus ? shellRoot.accentColor : "#303030"
+                        }
                         onEditingFinished: {
                             if (acceptableInput) {
-                                controlCenter.nightModeTo = text
+                                controlCenter.nightModeTo = text + ":00"
                                 controlCenter.saveNightModeSettings()
                                 controlCenter.restartNightMode()
                             } else {
-                                text = controlCenter.nightModeTo
+                                text = controlCenter.nightModeTo.slice(0, 5)
                             }
                         }
                     }

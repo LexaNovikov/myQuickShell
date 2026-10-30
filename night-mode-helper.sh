@@ -1,124 +1,97 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-forced="${1:-false}"
-scheduled="${2:-false}"
 temperature="${3:-5600}"
-from_time="${4:-21:00:00}"
-to_time="${5:-07:00:00}"
-
-settings_file="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/settings.toml"
-temp_file="${settings_file}.night-mode.$$"
+active="${6:-false}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+settings_file="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/settings.toml"
+pid_file="${XDG_RUNTIME_DIR:-/tmp}/quickshell-night-mode.pid"
 
-enabled=false
-if [[ "$forced" == true || "$scheduled" == true ]]; then
-    enabled=true
+if [[ ! "$temperature" =~ ^[0-9]+$ ]] || ((temperature < 3000 || temperature > 6500)); then
+    exit 2
 fi
 
+# Noctalia and wlsunset use the same gamma-control interface. Keep one owner.
 if [[ -f "$settings_file" ]]; then
-awk \
-    -v forced="$forced" \
-    -v scheduled="$scheduled" \
-    -v enabled="$enabled" \
-    -v temperature="$temperature" \
-    -v sunrise="${to_time:0:5}" \
-    -v sunset="${from_time:0:5}" '
+    temp_file="$(mktemp "${settings_file}.night-mode.XXXXXX")"
+    awk '
 function finish_section() {
-    if (section == "[location]") {
-        if (!seen_custom) print "custom_schedule = " scheduled
-        if (!seen_sunrise) print "sunrise = \"" sunrise "\""
-        if (!seen_sunset) print "sunset = \"" sunset "\""
-    } else if (section == "[nightlight]") {
-        if (!seen_enabled) print "enabled = " enabled
-        if (!seen_force) print "force = " forced
-        if (!seen_temperature) print "temperature_night = " temperature
+    if (section == "[nightlight]") {
+        if (!seen_enabled) print "enabled = false"
+        if (!seen_force) print "force = false"
     }
 }
-
 /^\[/ {
     finish_section()
     section = $0
-    if (section == "[location]") found_location = 1
     if (section == "[nightlight]") found_nightlight = 1
-    seen_custom = seen_sunrise = seen_sunset = 0
-    seen_enabled = seen_force = seen_temperature = 0
+    seen_enabled = seen_force = 0
     print
     next
 }
-
-section == "[location]" && /^custom_schedule[[:space:]]*=/ {
-    print "custom_schedule = " scheduled; seen_custom = 1; next
-}
-section == "[location]" && /^sunrise[[:space:]]*=/ {
-    print "sunrise = \"" sunrise "\""; seen_sunrise = 1; next
-}
-section == "[location]" && /^sunset[[:space:]]*=/ {
-    print "sunset = \"" sunset "\""; seen_sunset = 1; next
-}
 section == "[nightlight]" && /^enabled[[:space:]]*=/ {
-    print "enabled = " enabled; seen_enabled = 1; next
+    print "enabled = false"; seen_enabled = 1; next
 }
 section == "[nightlight]" && /^force[[:space:]]*=/ {
-    print "force = " forced; seen_force = 1; next
+    print "force = false"; seen_force = 1; next
 }
-section == "[nightlight]" && /^temperature_night[[:space:]]*=/ {
-    print "temperature_night = " temperature; seen_temperature = 1; next
-}
-
 { print }
-
 END {
     finish_section()
-    if (!found_location) {
-        print ""
-        print "[location]"
-        print "custom_schedule = " scheduled
-        print "sunrise = \"" sunrise "\""
-        print "sunset = \"" sunset "\""
-    }
     if (!found_nightlight) {
         print ""
         print "[nightlight]"
-        print "enabled = " enabled
-        print "force = " forced
-        print "temperature_night = " temperature
+        print "enabled = false"
+        print "force = false"
     }
 }
 ' "$settings_file" > "$temp_file"
 
-mv "$temp_file" "$settings_file"
+    if cmp -s "$temp_file" "$settings_file"; then
+        rm -f "$temp_file"
+    else
+        mv "$temp_file" "$settings_file"
+        if command -v noctalia >/dev/null 2>&1; then
+            noctalia msg config-reload >/dev/null 2>&1 || true
+        fi
+    fi
 fi
 
-fallback_pid_file="${XDG_RUNTIME_DIR:-/tmp}/quickshell-night-mode.pid"
+exec 9>"${pid_file}.lock"
+flock -x 9
 
-stop_fallback() {
-    if [[ -f "$fallback_pid_file" ]]; then
-        fallback_pid="$(cat "$fallback_pid_file")"
-        if [[ "$fallback_pid" =~ ^[0-9]+$ ]]; then
-            kill "$fallback_pid" 2>/dev/null || true
-        fi
-        rm -f "$fallback_pid_file"
-    fi
-}
+current_pid=""
+current_temperature=""
+if [[ -f "$pid_file" ]]; then
+    read -r current_pid current_temperature < "$pid_file" || true
+fi
 
-if [[ -f "$settings_file" ]] && command -v noctalia >/dev/null 2>&1 \
-    && noctalia msg config-reload >/dev/null 2>&1; then
-    stop_fallback
+owns_process=false
+if [[ "$current_pid" =~ ^[0-9]+$ && -r "/proc/$current_pid/comm" ]] \
+    && [[ "$(cat "/proc/$current_pid/comm")" == "wlsunset" ]]; then
+    owns_process=true
+fi
+
+if [[ "$active" == true && "$owns_process" == true \
+    && "$current_temperature" == "$temperature" ]]; then
     exit 0
 fi
 
-stop_fallback
-if [[ "$enabled" == true ]]; then
-    if command -v wlsunset >/dev/null 2>&1; then
-        wlsunset_bin="$(command -v wlsunset)"
-    else
-        wlsunset_bin="$script_dir/bin/wlsunset"
-    fi
-    if [[ "$forced" == true ]]; then
-        "$wlsunset_bin" -T "$((temperature + 1))" -t "$temperature" -S 00:00 -s 12:00 >/dev/null 2>&1 &
-    else
-        "$wlsunset_bin" -T 6500 -t "$temperature" -S "${to_time:0:5}" -s "${from_time:0:5}" >/dev/null 2>&1 &
-    fi
-    echo "$!" > "$fallback_pid_file"
+if [[ "$owns_process" == true ]]; then
+    kill "$current_pid" 2>/dev/null || true
 fi
+rm -f "$pid_file"
+
+if [[ "$active" != true ]]; then
+    exit 0
+fi
+
+if command -v wlsunset >/dev/null 2>&1; then
+    wlsunset_bin="$(command -v wlsunset)"
+else
+    wlsunset_bin="$script_dir/bin/wlsunset"
+fi
+
+# Hold one temperature; Quickshell changes it only at the schedule boundaries.
+"$wlsunset_bin" -T "$((temperature + 1))" -t "$temperature" -S 00:00 -s 12:00 9>&- >/dev/null 2>&1 &
+printf '%s %s\n' "$!" "$temperature" > "$pid_file"
