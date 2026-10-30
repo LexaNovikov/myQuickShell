@@ -5,10 +5,59 @@ import Quickshell.Io
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Notifications
 import Quickshell.Widgets
+import Quickshell.Wayland
 
 ShellRoot {
     id: shellRoot
     property string accentColor: "#25d8a3"
+
+    IdleMonitor {
+        timeout: 300
+        onIsIdleChanged: {
+            if (isIdle) {
+                if (!monitorsOffCommand.running)
+                    monitorsOffCommand.running = true
+            } else if (!monitorsOnCommand.running) {
+                monitorsOnCommand.running = true
+            }
+        }
+    }
+
+    IdleMonitor {
+        timeout: 600
+        onIsIdleChanged: {
+            if (isIdle && !idleSuspendCommand.running)
+                idleSuspendCommand.running = true
+        }
+    }
+
+    IdleMonitor {
+        timeout: 900
+        onIsIdleChanged: {
+            if (isIdle && !idleLockCommand.running)
+                idleLockCommand.running = true
+        }
+    }
+
+    Process {
+        id: monitorsOffCommand
+        command: ["niri", "msg", "action", "power-off-monitors"]
+    }
+
+    Process {
+        id: monitorsOnCommand
+        command: ["niri", "msg", "action", "power-on-monitors"]
+    }
+
+    Process {
+        id: idleSuspendCommand
+        command: [Quickshell.shellPath("session-action.sh"), "lock-and-suspend"]
+    }
+
+    Process {
+        id: idleLockCommand
+        command: [Quickshell.shellPath("session-action.sh"), "lock"]
+    }
 
     NotificationServer {
         id: notificationServer
@@ -497,10 +546,13 @@ ShellRoot {
                                 Canvas {
                                     anchors.centerIn: parent
                                     width: 14; height: 14
+                                    property color glyphColor: previousTrackMouse.containsMouse ? "#ffffff" : "#777777"
+                                    onGlyphColorChanged: requestPaint()
+                                    Behavior on glyphColor { ColorAnimation { duration: 160 } }
                                     onPaint: {
                                         let ctx = getContext("2d")
                                         ctx.reset()
-                                        ctx.fillStyle = "#ffffff"
+                                        ctx.fillStyle = glyphColor.toString()
                                         ctx.beginPath()
                                         ctx.roundedRect(1, 2, 3, 10, 1.5, 1.5)
                                         ctx.fill()
@@ -512,11 +564,11 @@ ShellRoot {
                                         ctx.fill()
                                     }
                                 }
-                                MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["previous"]); mprisCmd.running = true } }
+                                MouseArea { id: previousTrackMouse; cursorShape: Qt.PointingHandCursor; anchors.fill: parent; hoverEnabled: true; onClicked: { mprisCmd.command = playerWidget.playerCommand(["previous"]); mprisCmd.running = true } }
                             }
                             Rectangle {
                                 width: 36; height: 36; radius: 18; color: "#222222"
-                                anchors.bottom: parent.bottom
+                                anchors.verticalCenter: parent.verticalCenter
                                 Canvas {
                                     anchors.centerIn: parent
                                     width: 14; height: 14
@@ -549,10 +601,13 @@ ShellRoot {
                                 Canvas {
                                     anchors.centerIn: parent
                                     width: 14; height: 14
+                                    property color glyphColor: nextTrackMouse.containsMouse ? "#ffffff" : "#777777"
+                                    onGlyphColorChanged: requestPaint()
+                                    Behavior on glyphColor { ColorAnimation { duration: 160 } }
                                     onPaint: {
                                         let ctx = getContext("2d")
                                         ctx.reset()
-                                        ctx.fillStyle = "#ffffff"
+                                        ctx.fillStyle = glyphColor.toString()
                                         ctx.beginPath()
                                         ctx.moveTo(2, 2)
                                         ctx.lineTo(10, 7)
@@ -564,7 +619,7 @@ ShellRoot {
                                         ctx.fill()
                                     }
                                 }
-                                MouseArea { cursorShape: Qt.PointingHandCursor; anchors.fill: parent; onClicked: { mprisCmd.command = playerWidget.playerCommand(["next"]); mprisCmd.running = true } }
+                                MouseArea { id: nextTrackMouse; cursorShape: Qt.PointingHandCursor; anchors.fill: parent; hoverEnabled: true; onClicked: { mprisCmd.command = playerWidget.playerCommand(["next"]); mprisCmd.running = true } }
                             }
                         }
                     }
@@ -1454,7 +1509,7 @@ ShellRoot {
             }
 
             MouseArea {
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 anchors.fill: parent
                 enabled: !island.expanded && !island.notificationVisible
                     && !island.systemOsdVisible && island.calendarHoverArmed
@@ -1557,7 +1612,8 @@ ShellRoot {
                                     width: 29; height: 29; radius: width / 2
                                     color: calendarDay.modelData.isToday
                                            ? shellRoot.accentColor
-                                           : (calendarDay.modelData.key === island.selectedDateKey ? "#303030" : "transparent")
+                                           : (calendarDay.modelData.key === island.selectedDateKey
+                                              || calendarDayMouse.containsMouse ? "#303030" : "transparent")
                                 }
 
                                 Text {
@@ -1579,8 +1635,10 @@ ShellRoot {
                                 }
 
                                 MouseArea {
+                                    id: calendarDayMouse
                                     cursorShape: Qt.PointingHandCursor
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     enabled: calendarDay.modelData.inCurrentMonth
                                     onClicked: island.selectedDateKey = calendarDay.modelData.key
                                 }
