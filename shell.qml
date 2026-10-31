@@ -10,6 +10,13 @@ import Quickshell.Wayland
 ShellRoot {
     id: shellRoot
     property string accentColor: "#25d8a3"
+    property string selectedWallpaper: ""
+    property bool smartPaletteEnabled: false
+    property bool nightModeForced: false
+    property bool nightModeScheduleEnabled: false
+    property int nightModeTemperature: 5600
+    property string nightModeFrom: "21:00:00"
+    property string nightModeTo: "07:00:00"
 
     IdleMonitor {
         timeout: 300
@@ -69,6 +76,30 @@ ShellRoot {
         inlineReplySupported: true
 
         onNotification: notification => {
+            let panel = panelVariants.instances.length > 0 ? panelVariants.instances[0] : null
+            if (panel) panel.presentNotification(notification)
+        }
+    }
+
+    PwObjectTracker {
+        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
+    }
+
+    Variants {
+        id: panelVariants
+        model: Quickshell.screens
+
+        delegate: PanelWindow {
+        property var modelData
+        screen: modelData
+        id: mainWindow
+        anchors { top: true; left: true; right: true }
+        focusable: island.notificationCanReply
+            || (controlCenter.isOpen
+                && (controlCenter.wifiMenuOpen || controlCenter.nightModeMenuOpen
+                    || controlCenter.personalizationMenuOpen))
+
+        function presentNotification(notification) {
             if (island.notificationReplyOpen) {
                 console.info("Notification ignored while composing reply:", notification.appName)
                 return
@@ -99,19 +130,6 @@ ShellRoot {
             controlCenter.isOpen = false
             notificationTimeout.restart()
         }
-    }
-
-    PwObjectTracker {
-        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
-    }
-
-    PanelWindow {
-        id: mainWindow
-        anchors { top: true; left: true; right: true }
-        focusable: island.notificationCanReply
-            || (controlCenter.isOpen
-                && (controlCenter.wifiMenuOpen || controlCenter.nightModeMenuOpen
-                    || controlCenter.personalizationMenuOpen))
 
         property int playerSurfaceHeight: 32
         property int islandSurfaceHeight: 32
@@ -1922,19 +1940,92 @@ ShellRoot {
             readonly property int personalizationMenuHeight: customAccentOpen ? 504 : 448
             property var wallpapers: []
             property string wallpaperDirectory: ""
-            property string selectedWallpaper: ""
+            property string selectedWallpaper: shellRoot.selectedWallpaper
             property string personalizationMessage: ""
             property string customAccentText: shellRoot.accentColor
             property int wallpaperCarouselIndex: 0
-            property bool smartPaletteEnabled: false
+            property bool smartPaletteEnabled: shellRoot.smartPaletteEnabled
             property bool customAccentOpen: false
+            onSelectedWallpaperChanged: {
+                if (shellRoot.selectedWallpaper !== selectedWallpaper) {
+                    shellRoot.selectedWallpaper = selectedWallpaper
+                    return
+                }
+                let index = wallpapers.indexOf(selectedWallpaper)
+                if (index < 0) return
+                wallpaperSlide.stop()
+                wallpaperCarouselIndex = index
+                wallpaperCarousel.position = index
+            }
+            onSmartPaletteEnabledChanged: {
+                if (shellRoot.smartPaletteEnabled !== smartPaletteEnabled)
+                    shellRoot.smartPaletteEnabled = smartPaletteEnabled
+            }
+            Connections {
+                target: shellRoot
+                function onSelectedWallpaperChanged() {
+                    if (controlCenter.selectedWallpaper === shellRoot.selectedWallpaper) return
+                    controlCenter.selectedWallpaper = shellRoot.selectedWallpaper
+                }
+                function onSmartPaletteEnabledChanged() {
+                    if (controlCenter.smartPaletteEnabled !== shellRoot.smartPaletteEnabled)
+                        controlCenter.smartPaletteEnabled = shellRoot.smartPaletteEnabled
+                }
+            }
             readonly property var accentPalette: ["#25d8a3", "#e993dc", "#e2aa76", "#ed414b"]
-            property bool nightModeForced: false
-            property bool nightModeScheduleEnabled: false
+            property bool nightModeForced: shellRoot.nightModeForced
+            property bool nightModeScheduleEnabled: shellRoot.nightModeScheduleEnabled
             property bool nightModeActive: false
-            property int nightModeTemperature: 5600
-            property string nightModeFrom: "21:00:00"
-            property string nightModeTo: "07:00:00"
+            property int nightModeTemperature: shellRoot.nightModeTemperature
+            property string nightModeFrom: shellRoot.nightModeFrom
+            property string nightModeTo: shellRoot.nightModeTo
+            onNightModeForcedChanged: {
+                if (shellRoot.nightModeForced !== nightModeForced)
+                    shellRoot.nightModeForced = nightModeForced
+                refreshNightModeActive()
+            }
+            onNightModeScheduleEnabledChanged: {
+                if (shellRoot.nightModeScheduleEnabled !== nightModeScheduleEnabled)
+                    shellRoot.nightModeScheduleEnabled = nightModeScheduleEnabled
+                refreshNightModeActive()
+            }
+            onNightModeTemperatureChanged: {
+                if (shellRoot.nightModeTemperature !== nightModeTemperature)
+                    shellRoot.nightModeTemperature = nightModeTemperature
+            }
+            onNightModeFromChanged: {
+                if (shellRoot.nightModeFrom !== nightModeFrom)
+                    shellRoot.nightModeFrom = nightModeFrom
+                refreshNightModeActive()
+            }
+            onNightModeToChanged: {
+                if (shellRoot.nightModeTo !== nightModeTo)
+                    shellRoot.nightModeTo = nightModeTo
+                refreshNightModeActive()
+            }
+            Connections {
+                target: shellRoot
+                function onNightModeForcedChanged() {
+                    if (controlCenter.nightModeForced !== shellRoot.nightModeForced)
+                        controlCenter.nightModeForced = shellRoot.nightModeForced
+                }
+                function onNightModeScheduleEnabledChanged() {
+                    if (controlCenter.nightModeScheduleEnabled !== shellRoot.nightModeScheduleEnabled)
+                        controlCenter.nightModeScheduleEnabled = shellRoot.nightModeScheduleEnabled
+                }
+                function onNightModeTemperatureChanged() {
+                    if (controlCenter.nightModeTemperature !== shellRoot.nightModeTemperature)
+                        controlCenter.nightModeTemperature = shellRoot.nightModeTemperature
+                }
+                function onNightModeFromChanged() {
+                    if (controlCenter.nightModeFrom !== shellRoot.nightModeFrom)
+                        controlCenter.nightModeFrom = shellRoot.nightModeFrom
+                }
+                function onNightModeToChanged() {
+                    if (controlCenter.nightModeTo !== shellRoot.nightModeTo)
+                        controlCenter.nightModeTo = shellRoot.nightModeTo
+                }
+            }
             property string nightModeError: ""
             property bool nightModeApplyPending: false
             property real memoryUsedGiB: 0
@@ -2038,7 +2129,7 @@ ShellRoot {
                     selectedWallpaper = settings.wallpaper || ""
                     smartPaletteEnabled = settings.smartPalette === true
                     if (selectedWallpaper !== "")
-                        Qt.callLater(() => applyWallpaper(selectedWallpaper))
+                        wallpaperRestoreDelay.restart()
                 } catch (error) {
                     personalizationMessage = "Could not read personalization settings"
                 }
@@ -2908,6 +2999,22 @@ ShellRoot {
                     }
                 }
             }
+
+            Timer {
+                id: wallpaperRestoreDelay
+                interval: 700
+                onTriggered: {
+                    if (controlCenter.selectedWallpaper === "" || !mainWindow.modelData)
+                        return
+                    wallpaperRestoreCommand.command = [
+                        Quickshell.shellPath("wallpaper-helper.sh"), "set",
+                        controlCenter.selectedWallpaper, mainWindow.modelData.name
+                    ]
+                    wallpaperRestoreCommand.running = true
+                }
+            }
+
+            Process { id: wallpaperRestoreCommand }
 
             Process {
                 id: wallpaperApplyCommand
@@ -5230,5 +5337,6 @@ ShellRoot {
                 }
             }
         }
+    }
     }
 }

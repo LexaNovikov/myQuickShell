@@ -54,6 +54,7 @@ case "$command_name" in
         ;;
     set)
         wallpaper="${2:-}"
+        output_name="${3:-}"
         [[ -n "$wallpaper" ]] || { printf 'Wallpaper path is empty\n' >&2; exit 2; }
         [[ -f "$wallpaper" ]] || { printf 'Wallpaper does not exist\n' >&2; exit 2; }
 
@@ -81,14 +82,23 @@ case "$command_name" in
             done
         fi
 
-        awww img "$resolved_wallpaper" \
+        image_command=(img "$resolved_wallpaper" \
             --resize crop \
             --transition-type grow \
             --transition-duration 0.8 \
-            --transition-fps 60
+            --transition-fps 60)
+        if [[ -n "$output_name" ]]; then
+            image_command+=(--outputs "$output_name")
+            for _ in {1..10}; do
+                awww "${image_command[@]}" && exit 0
+                sleep 0.2
+            done
+            exit 1
+        fi
+        awww "${image_command[@]}"
         ;;
     *)
-        printf 'Usage: %s {directory|list|accent PATH|set PATH}\n' "$0" >&2
+        printf 'Usage: %s {directory|list|accent PATH|set PATH [OUTPUT]}\n' "$0" >&2
         exit 2
         ;;
 esac
