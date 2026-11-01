@@ -809,7 +809,7 @@ ShellRoot {
             }
             readonly property bool notificationHasButtons: notificationButtons.length > 0 || notificationCanReply
             readonly property int targetHeight: expanded
-                ? 320
+                ? (calendarDays.length > 35 ? 349 : 314)
                 : (notificationVisible
                    ? Math.ceil(Math.max(56, notificationContentColumn.implicitHeight)
                                + 20
