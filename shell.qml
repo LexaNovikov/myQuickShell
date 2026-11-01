@@ -809,7 +809,7 @@ ShellRoot {
             }
             readonly property bool notificationHasButtons: notificationButtons.length > 0 || notificationCanReply
             readonly property int targetHeight: expanded
-                ? (calendarDays.length > 35 ? 349 : 314)
+                ? 320
                 : (notificationVisible
                    ? Math.ceil(Math.max(56, notificationContentColumn.implicitHeight)
                                + 20
@@ -818,6 +818,7 @@ ShellRoot {
             readonly property var weekdayNames: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
             readonly property string todayKey: dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate())
             property string selectedDateKey: todayKey
+            property date displayedMonth: new Date(now.getFullYear(), now.getMonth(), 1)
             readonly property var eventDates: {
                 let dates = ({})
                 for (let index = 0; index < calendarEvents.length; ++index)
@@ -833,14 +834,12 @@ ShellRoot {
                 return tasks.slice(0, 5)
             }
             readonly property var calendarDays: {
-                let year = now.getFullYear()
-                let month = now.getMonth()
+                let year = displayedMonth.getFullYear()
+                let month = displayedMonth.getMonth()
                 let firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7
-                let daysInMonth = new Date(year, month + 1, 0).getDate()
-                let cellCount = Math.ceil((firstWeekday + daysInMonth) / 7) * 7
                 let days = []
 
-                for (let index = 0; index < cellCount; ++index) {
+                for (let index = 0; index < 42; ++index) {
                     let date = new Date(year, month, index - firstWeekday + 1)
                     let key = dateKey(date.getFullYear(), date.getMonth() + 1, date.getDate())
                     days.push({
@@ -867,6 +866,10 @@ ShellRoot {
                 let day = now.getDate().toString().padStart(2, "0")
                 let month = (now.getMonth() + 1).toString().padStart(2, "0")
                 return weekdays[now.getDay()] + " " + day + "." + month + "." + now.getFullYear()
+            }
+
+            function changeCalendarMonth(offset) {
+                displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + offset, 1)
             }
 
             function refreshCalendar() {
@@ -1055,7 +1058,7 @@ ShellRoot {
                 })
             }
 
-            width: expanded ? 650 : (notificationVisible ? 380 : (systemOsdVisible ? 290 : 68))
+            width: expanded ? 600 : (notificationVisible ? 380 : (systemOsdVisible ? 290 : 68))
             height: targetHeight
             radius: expanded ? 34 : (notificationVisible ? 26 : (systemOsdVisible ? 26 : 16))
             color: "#000000"
@@ -1570,6 +1573,7 @@ ShellRoot {
                     playerWidget.expanded = false
                     controlCenter.isOpen = false
                     island.selectedDateKey = island.todayKey
+                    island.displayedMonth = new Date(island.now.getFullYear(), island.now.getMonth(), 1)
                     island.refreshCalendar()
                     island.expanded = true
                 }
@@ -1599,42 +1603,72 @@ ShellRoot {
 
             Row {
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                anchors.margins: 18
+                spacing: 13
                 opacity: island.expanded ? 1 : 0
                 visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 220 } }
 
                 Rectangle {
-                    width: 386
+                    width: 333
                     height: parent.height
                     radius: 28
                     color: "#161616"
 
                     Text {
-                        anchors { top: parent.top; left: parent.left; topMargin: 20; leftMargin: 20 }
-                        text: island.dateTitle()
+                        anchors { top: parent.top; left: parent.left; topMargin: 20; leftMargin: 21 }
+                        text: island.displayedMonth.getFullYear() === island.now.getFullYear()
+                              && island.displayedMonth.getMonth() === island.now.getMonth()
+                              ? island.dateTitle()
+                              : Qt.formatDate(island.displayedMonth, "MMMM yyyy")
                         color: "#ffffff"
                         font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 18
                     }
 
                     Text {
-                        anchors { top: parent.top; right: parent.right; topMargin: 20; rightMargin: 20 }
+                        id: calendarClock
+                        anchors { top: parent.top; right: parent.right; topMargin: 20; rightMargin: 21 }
                         text: Qt.formatTime(island.now, "HH:mm")
                         color: "#ffffff"
                         font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 18
                     }
 
                     Row {
+                        anchors { right: calendarClock.left; verticalCenter: calendarClock.verticalCenter; rightMargin: 13 }
+                        spacing: 5
+
+                        Repeater {
+                            model: [-1, 1]
+                            Item {
+                                required property int modelData
+                                width: 23; height: 28
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: parent.modelData < 0 ? "‹" : "›"
+                                    color: "#ffffff"
+                                    font.family: "SF Pro Rounded"; font.pixelSize: 29
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: island.changeCalendarMonth(parent.modelData)
+                                }
+                            }
+                        }
+                    }
+
+                    Row {
                         id: calendarWeekdays
-                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 66; leftMargin: 18; rightMargin: 18 }
-                        spacing: 6
+                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 62; leftMargin: 21; rightMargin: 21 }
+                        spacing: 7
 
                         Repeater {
                             model: island.weekdayNames
                             Text {
                                 required property string modelData
-                                width: (calendarWeekdays.width - 36) / 7
+                                width: (calendarWeekdays.width - 42) / 7
                                 horizontalAlignment: Text.AlignHCenter
                                 text: modelData
                                 color: "#6f6f6f"
@@ -1645,23 +1679,23 @@ ShellRoot {
 
                     Grid {
                         id: calendarGrid
-                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 96; leftMargin: 18; rightMargin: 18 }
+                        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 87; leftMargin: 21; rightMargin: 21 }
                         columns: 7
-                        columnSpacing: 6
-                        rowSpacing: 4
+                        columnSpacing: 7
+                        rowSpacing: 2
 
                         Repeater {
                             model: island.calendarDays
                             Item {
                                 id: calendarDay
                                 required property var modelData
-                                width: (calendarGrid.width - 36) / 7
-                                height: 31
+                                width: (calendarGrid.width - 42) / 7
+                                height: 28
 
                                 Rectangle {
                                     id: calendarDayCircle
                                     anchors.centerIn: parent
-                                    width: 29; height: 29; radius: width / 2
+                                    width: 28; height: 28; radius: width / 2
                                     color: calendarDay.modelData.isToday
                                            ? shellRoot.accentColor
                                            : (calendarDay.modelData.key === island.selectedDateKey
@@ -1700,31 +1734,31 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: 220
+                    width: 218
                     height: parent.height
                     radius: 28
                     color: "#161616"
 
                     Text {
                         id: tasksTitle
-                        anchors { top: parent.top; left: parent.left; topMargin: 20; leftMargin: 20 }
+                        anchors { top: parent.top; left: parent.left; topMargin: 20; leftMargin: 21 }
                         text: "Tasks"
                         color: "#ffffff"
                         font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 18
                     }
 
                     Column {
-                        anchors { top: tasksTitle.bottom; left: parent.left; right: parent.right; topMargin: 14; leftMargin: 14; rightMargin: 14 }
-                        spacing: 8
+                        anchors { top: tasksTitle.bottom; left: parent.left; right: parent.right; topMargin: 11; leftMargin: 13; rightMargin: 13 }
+                        spacing: 9
 
                         Repeater {
                             model: island.calendarTasks
                             Rectangle {
                                 required property var modelData
-                                width: 192; height: 38; radius: 19; color: "#000000"
+                                width: parent.width; height: 30; radius: 15; color: "#000000"
 
                                 Text {
-                                    anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 14 }
+                                    anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 13 }
                                     width: 120
                                     text: parent.modelData.title
                                     elide: Text.ElideRight
@@ -1732,7 +1766,7 @@ ShellRoot {
                                     font.family: "SF Pro Rounded"; font.pixelSize: 14
                                 }
                                 Text {
-                                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 14 }
+                                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 13 }
                                     text: parent.modelData.time
                                     color: "#ffffff"
                                     font.family: "SF Pro Rounded"; font.pixelSize: 14
@@ -1742,7 +1776,7 @@ ShellRoot {
                     }
 
                     Text {
-                        anchors { top: tasksTitle.bottom; left: parent.left; topMargin: 18; leftMargin: 20 }
+                        anchors { top: tasksTitle.bottom; left: parent.left; topMargin: 16; leftMargin: 21 }
                         visible: island.calendarTasks.length === 0
                         text: island.calendarError === "" ? "No tasks" : "Calendar unavailable"
                         color: "#777777"
