@@ -4,17 +4,37 @@ use strict;
 use warnings;
 use utf8;
 use Encode qw(decode);
+use File::Path qw(make_path);
 use JSON::PP;
 use Time::Local qw(timegm);
 
 my $base_dir = $0;
 $base_dir =~ s{/[^/]+$}{};
 my $url_file = "$base_dir/google-calendar.url";
+my @now = localtime;
+my $year = $now[5] + 1900;
+my $month = $now[4] + 1;
+my $period = sprintf('%04d-%02d', $year, $month);
+my $cache_dir = ($ENV{XDG_CACHE_HOME} // "$ENV{HOME}/.cache") . '/quickshell';
+my $cache_file = "$cache_dir/google-calendar-cache.json";
 
 sub result {
     my ($payload) = @_;
     print JSON::PP->new->utf8->canonical->encode($payload);
     exit 0;
+}
+
+sub cached_result {
+    open my $cache_fh, '<', $cache_file or return;
+    local $/;
+    my $raw = <$cache_fh>;
+    close $cache_fh;
+    my $cache = eval { decode_json($raw) };
+    return unless ref($cache) eq 'HASH'
+        && ($cache->{period} // '') eq $period
+        && ref($cache->{events}) eq 'ARRAY';
+    return { configured => JSON::PP::true, events => $cache->{events},
+             error => 'Could not download calendar' };
 }
 
 result({ configured => JSON::PP::false, events => [] }) unless -s $url_file;
@@ -27,11 +47,11 @@ result({ configured => JSON::PP::false, events => [] }) unless $url =~ m{^https:
 
 open my $curl, '-|', 'curl', '--fail', '--silent', '--show-error', '--location',
     '--max-time', '15', $url
-    or result({ configured => JSON::PP::true, events => [], error => 'Could not start calendar download' });
+    or result(cached_result() // { configured => JSON::PP::true, events => [], error => 'Could not start calendar download' });
 local $/;
 my $ics = <$curl> // '';
 close $curl;
-result({ configured => JSON::PP::true, events => [], error => 'Could not download calendar' })
+result(cached_result() // { configured => JSON::PP::true, events => [], error => 'Could not download calendar' })
     if $? != 0 || $ics eq '';
 
 $ics = decode('UTF-8', $ics);
@@ -99,9 +119,6 @@ for my $line (split /\n/, $ics) {
     push @{ $current->{$name} }, $value;
 }
 
-my @now = localtime;
-my $year = $now[5] + 1900;
-my $month = $now[4] + 1;
 my $window_start = ordinal($year, $month, 1);
 my ($next_year, $next_month) = $month == 12 ? ($year + 1, 1) : ($year, $month + 1);
 my $window_end = ordinal($next_year, $next_month, 1) - 1;
@@ -191,5 +208,20 @@ my @events = sort {
         || $a->{allDay} <=> $b->{allDay}
         || $a->{time} cmp $b->{time}
 } values %output;
+
+my $cache_json = JSON::PP->new->utf8->canonical->encode({ period => $period, events => \@events });
+{
+    local $SIG{__WARN__} = sub {};
+    local $!;
+    umask 0077;
+    if (eval { make_path($cache_dir, { mode => 0700 }); 1 }) {
+        my $temp_file = "$cache_file.$$";
+        if (open my $cache_fh, '>', $temp_file) {
+            print {$cache_fh} $cache_json;
+            close $cache_fh;
+            rename $temp_file, $cache_file or unlink $temp_file;
+        }
+    }
+}
 
 result({ configured => JSON::PP::true, events => \@events });

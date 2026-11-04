@@ -1085,14 +1085,35 @@ ShellRoot {
                         try {
                             let response = JSON.parse(this.text.trim())
                             island.calendarConfigured = response.configured === true
-                            island.calendarEvents = response.events || []
-                            island.calendarError = response.error || ""
+                            if (Array.isArray(response.events) && response.events.length > 0)
+                                island.calendarEvents = response.events
+                            if (response.error) {
+                                console.warn("Calendar refresh failed:", response.error)
+                                if (island.calendarEvents.length === 0)
+                                    island.calendarError = response.error
+                                calendarRetry.restart()
+                                return
+                            }
+                            island.calendarEvents = Array.isArray(response.events) ? response.events : []
+                            island.calendarError = ""
+                            calendarRetry.stop()
+                            console.info("Calendar loaded:", island.calendarEvents.length,
+                                         "events; selected date:", island.selectedDateKey,
+                                         "tasks:", island.calendarTasks.length)
                         } catch (error) {
-                            island.calendarEvents = []
-                            island.calendarError = "Could not read calendar"
+                            console.warn("Calendar response is invalid:", error)
+                            if (island.calendarEvents.length === 0)
+                                island.calendarError = "Could not read calendar"
+                            calendarRetry.restart()
                         }
                     }
                 }
+            }
+
+            Timer {
+                id: calendarRetry
+                interval: 10000
+                onTriggered: island.refreshCalendar()
             }
 
             Timer {
@@ -1711,6 +1732,7 @@ ShellRoot {
                                            ? "#050505"
                                            : (calendarDay.modelData.inCurrentMonth ? "#ffffff" : "#686868")
                                     font.family: "SF Pro Rounded"
+                                    font.weight: Font.Medium
                                     font.pixelSize: 16
                                 }
 
@@ -1765,13 +1787,13 @@ ShellRoot {
                                     text: parent.modelData.title
                                     elide: Text.ElideRight
                                     color: "#ffffff"
-                                    font.family: "SF Pro Rounded"; font.pixelSize: 14
+                                    font.family: "SF Pro Rounded"; font.weight: Font.Medium; font.pixelSize: 14
                                 }
                                 Text {
                                     anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 13 }
                                     text: parent.modelData.time
                                     color: "#ffffff"
-                                    font.family: "SF Pro Rounded"; font.pixelSize: 14
+                                    font.family: "SF Pro Rounded"; font.weight: Font.Medium; font.pixelSize: 14
                                 }
                             }
                         }
