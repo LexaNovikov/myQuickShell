@@ -227,6 +227,14 @@ sudo reboot
 
 После обновления `greeter/shell.qml` повторно выполните `sudo ./install-greeter.sh install "$USER"`, чтобы скопировать новую версию в `/etc/greetd`.
 
+Если установленная версия greeter-а принимает отпечаток только в первые секунды после загрузки, обновите её PAM-настройки и скрипт запуска:
+
+```bash
+sudo ./install-greeter.sh update-auth
+```
+
+Команда сохраняет прежний `/etc/pam.d/greetd` в `/etc/greetd/quickshell-backup/greetd.pam.before-auth-update`. Изменение вступит в силу при следующем входе.
+
 ### Возврат к SDDM
 
 Если greeter не запустился, перейдите в TTY через `Ctrl+Alt+F3`, войдите в систему и выполните:

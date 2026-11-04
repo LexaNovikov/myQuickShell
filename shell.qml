@@ -809,7 +809,7 @@ ShellRoot {
             }
             readonly property bool notificationHasButtons: notificationButtons.length > 0 || notificationCanReply
             readonly property int targetHeight: expanded
-                ? 320
+                ? 335
                 : (notificationVisible
                    ? Math.ceil(Math.max(56, notificationContentColumn.implicitHeight)
                                + 20
@@ -1058,7 +1058,7 @@ ShellRoot {
                 })
             }
 
-            width: expanded ? 600 : (notificationVisible ? 380 : (systemOsdVisible ? 290 : 68))
+            width: expanded ? 640 : (notificationVisible ? 380 : (systemOsdVisible ? 290 : 68))
             height: targetHeight
             radius: expanded ? 34 : (notificationVisible ? 26 : (systemOsdVisible ? 26 : 16))
             color: "#000000"
@@ -1610,18 +1610,19 @@ ShellRoot {
                 Behavior on opacity { NumberAnimation { duration: 220 } }
 
                 Rectangle {
-                    width: 333
+                    width: 373
                     height: parent.height
                     radius: 28
                     color: "#161616"
 
                     Text {
-                        anchors { top: parent.top; left: parent.left; topMargin: 20; leftMargin: 21 }
+                        anchors { top: parent.top; left: parent.left; right: calendarNavigation.left; topMargin: 20; leftMargin: 21; rightMargin: 6 }
                         text: island.displayedMonth.getFullYear() === island.now.getFullYear()
                               && island.displayedMonth.getMonth() === island.now.getMonth()
                               ? island.dateTitle()
                               : Qt.formatDate(island.displayedMonth, "MMMM yyyy")
                         color: "#ffffff"
+                        elide: Text.ElideRight
                         font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 18
                     }
 
@@ -1634,6 +1635,7 @@ ShellRoot {
                     }
 
                     Row {
+                        id: calendarNavigation
                         anchors { right: calendarClock.left; verticalCenter: calendarClock.verticalCenter; rightMargin: 13 }
                         spacing: 5
 
@@ -1682,7 +1684,7 @@ ShellRoot {
                         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 87; leftMargin: 21; rightMargin: 21 }
                         columns: 7
                         columnSpacing: 7
-                        rowSpacing: 2
+                        rowSpacing: 5
 
                         Repeater {
                             model: island.calendarDays
@@ -1715,7 +1717,7 @@ ShellRoot {
                                 Rectangle {
                                     visible: calendarDay.modelData.hasEvents
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    y: 24
+                                    y: 22
                                     width: 4; height: 4; radius: 2
                                     color: calendarDay.modelData.isToday ? "#050505" : "#ffffff"
                                 }

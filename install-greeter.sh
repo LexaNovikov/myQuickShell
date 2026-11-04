@@ -18,6 +18,24 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 case "$action" in
+    update-auth)
+        if [[ ! -f "$target_dir/shell.qml" ]]; then
+            echo "Quickshell greeter is not installed in $target_dir" >&2
+            exit 2
+        fi
+
+        install -d -m 700 "$backup_dir"
+        if [[ ! -e "$backup_dir/greetd.pam.before-auth-update" ]]; then
+            install -m 600 /etc/pam.d/greetd "$backup_dir/greetd.pam.before-auth-update"
+        fi
+
+        install -d -m 755 /usr/local/libexec
+        install -m 755 "$source_dir/system/quickshell-greeter-password-mode" /usr/local/libexec/quickshell-greeter-password-mode
+        install -m 755 "$source_dir/system/quickshell-greeter-session" /usr/local/bin/quickshell-greeter-session
+        install -m 644 "$source_dir/system/greetd.pam" /etc/pam.d/greetd
+
+        echo "Greeter fingerprint authentication updated; it will apply at the next login."
+        ;;
     install)
         login_user="${2:-${SUDO_USER:-}}"
         if [[ -z "$login_user" || "$login_user" == "root" || "$login_user" == "greeter" ]]; then
@@ -98,7 +116,7 @@ case "$action" in
         ;;
 
     *)
-        echo "Usage: $0 {preview|install [USER]|restore-sddm|restore-greetd-config}" >&2
+        echo "Usage: $0 {preview|install [USER]|update-auth|restore-sddm|restore-greetd-config}" >&2
         exit 2
         ;;
 esac

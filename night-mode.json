@@ -1,7 +1,7 @@
 {
   "forced": false,
-  "schedule": false,
-  "temperature": 4400,
+  "schedule": true,
+  "temperature": 5000,
   "from": "01:19:00",
   "to": "23:59:00"
 }
