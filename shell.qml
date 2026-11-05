@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import QtQuick.Controls
 import Quickshell.Io
@@ -205,6 +206,54 @@ ShellRoot {
             Region {
                 item: controlWidget
                 radius: controlWidget.radius
+            }
+        }
+
+        Rectangle {
+            anchors.fill: playerWidget
+            radius: playerWidget.radius
+            color: "#000000"
+            z: -1
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#66ffffff"
+                shadowBlur: 0.65
+                blurMax: 8
+                shadowVerticalOffset: 0
+                shadowHorizontalOffset: 0
+            }
+        }
+
+        Rectangle {
+            anchors.fill: island
+            radius: island.radius
+            color: "#000000"
+            z: -1
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#66ffffff"
+                shadowBlur: 0.65
+                blurMax: 8
+                shadowVerticalOffset: 0
+                shadowHorizontalOffset: 0
+            }
+        }
+
+        Rectangle {
+            anchors.fill: controlWidget
+            radius: controlWidget.radius
+            color: "#000000"
+            z: -1
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#66ffffff"
+                shadowBlur: 0.65
+                blurMax: 8
+                shadowVerticalOffset: 0
+                shadowHorizontalOffset: 0
             }
         }
 
@@ -819,6 +868,8 @@ ShellRoot {
             readonly property string todayKey: dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate())
             property string selectedDateKey: todayKey
             property date displayedMonth: new Date(now.getFullYear(), now.getMonth(), 1)
+            property int pendingMonthSteps: 0
+            property int monthTransitionDirection: 1
             readonly property var eventDates: {
                 let dates = ({})
                 for (let index = 0; index < calendarEvents.length; ++index)
@@ -869,7 +920,15 @@ ShellRoot {
             }
 
             function changeCalendarMonth(offset) {
-                displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + offset, 1)
+                pendingMonthSteps += offset
+                if (!monthTransition.running) startNextMonthTransition()
+            }
+
+            function startNextMonthTransition() {
+                if (pendingMonthSteps === 0) return
+                monthTransitionDirection = pendingMonthSteps > 0 ? 1 : -1
+                pendingMonthSteps -= monthTransitionDirection
+                monthTransition.start()
             }
 
             function refreshCalendar() {
@@ -1595,6 +1654,7 @@ ShellRoot {
                     controlCenter.isOpen = false
                     island.selectedDateKey = island.todayKey
                     island.displayedMonth = new Date(island.now.getFullYear(), island.now.getMonth(), 1)
+                    island.pendingMonthSteps = 0
                     island.refreshCalendar()
                     island.expanded = true
                 }
@@ -1643,6 +1703,7 @@ ShellRoot {
                               ? island.dateTitle()
                               : Qt.formatDate(island.displayedMonth, "MMMM yyyy")
                         color: "#ffffff"
+                        opacity: calendarGrid.opacity
                         elide: Text.ElideRight
                         font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 18
                     }
@@ -1706,6 +1767,45 @@ ShellRoot {
                         columns: 7
                         columnSpacing: 7
                         rowSpacing: 5
+                        transform: Translate { id: calendarSlide }
+
+                        SequentialAnimation {
+                            id: monthTransition
+                            onStopped: Qt.callLater(() => island.startNextMonthTransition())
+
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: calendarSlide; property: "x"
+                                    from: 0; to: -18 * island.monthTransitionDirection
+                                    duration: 140; easing.type: Easing.InCubic
+                                }
+                                NumberAnimation {
+                                    target: calendarGrid; property: "opacity"
+                                    from: 1; to: 0; duration: 140
+                                }
+                            }
+
+                            ScriptAction {
+                                script: {
+                                    island.displayedMonth = new Date(
+                                        island.displayedMonth.getFullYear(),
+                                        island.displayedMonth.getMonth() + island.monthTransitionDirection, 1)
+                                    calendarSlide.x = 18 * island.monthTransitionDirection
+                                }
+                            }
+
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: calendarSlide; property: "x"
+                                    from: 18 * island.monthTransitionDirection; to: 0
+                                    duration: 180; easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: calendarGrid; property: "opacity"
+                                    from: 0; to: 1; duration: 180
+                                }
+                            }
+                        }
 
                         Repeater {
                             model: island.calendarDays
@@ -1778,8 +1878,50 @@ ShellRoot {
                         Repeater {
                             model: island.calendarTasks
                             Rectangle {
+                                id: taskRow
+                                required property int index
                                 required property var modelData
                                 width: parent.width; height: 30; radius: 15; color: "#000000"
+                                opacity: 0
+                                transform: Translate { id: taskRise; y: 6 }
+
+                                function reveal() {
+                                    taskAppear.restart()
+                                }
+
+                                Component.onCompleted: {
+                                    if (island.expanded) reveal()
+                                }
+
+                                Connections {
+                                    target: island
+                                    function onExpandedChanged() {
+                                        if (island.expanded) {
+                                            taskRow.reveal()
+                                        } else {
+                                            taskAppear.stop()
+                                            taskRow.opacity = 0
+                                            taskRise.y = 6
+                                        }
+                                    }
+                                }
+
+                                SequentialAnimation {
+                                    id: taskAppear
+                                    PauseAnimation { duration: taskRow.index * 45 }
+                                    ParallelAnimation {
+                                        NumberAnimation {
+                                            target: taskRow; property: "opacity"
+                                            from: 0; to: 1; duration: 220
+                                            easing.type: Easing.OutCubic
+                                        }
+                                        NumberAnimation {
+                                            target: taskRise; property: "y"
+                                            from: 6; to: 0; duration: 260
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                }
 
                                 Text {
                                     anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 13 }

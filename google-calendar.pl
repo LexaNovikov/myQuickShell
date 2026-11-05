@@ -6,7 +6,8 @@ use utf8;
 use Encode qw(decode);
 use File::Path qw(make_path);
 use JSON::PP;
-use Time::Local qw(timegm);
+use POSIX qw(tzset);
+use Time::Local qw(timegm timelocal);
 
 my $base_dir = $0;
 $base_dir =~ s{/[^/]+$}{};
@@ -83,11 +84,29 @@ sub date_key {
 }
 
 sub parse_date_value {
-    my ($value) = @_;
+    my ($value, $tzid) = @_;
     return unless defined $value;
-    if ($value =~ /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/) {
-        my ($year, $month, $day, $hour, $minute) = ($1, $2, $3, $4, $5);
+    if ($value =~ /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/) {
+        my ($year, $month, $day, $hour, $minute, $second, $utc)
+            = ($1, $2, $3, $4, $5, $6, $7);
         my $all_day = !defined $hour;
+        if (!$all_day && ($utc || defined $tzid)) {
+            my $epoch;
+            if ($utc) {
+                $epoch = eval { timegm($second, $minute, $hour, $day, $month - 1, $year) };
+            } elsif ($tzid =~ m{^[A-Za-z0-9_+./-]+$}) {
+                {
+                    local $ENV{TZ} = $tzid;
+                    tzset();
+                    $epoch = eval { timelocal($second, $minute, $hour, $day, $month - 1, $year) };
+                }
+                tzset();
+            }
+            return unless defined $epoch;
+            my @local = localtime($epoch);
+            ($year, $month, $day, $hour, $minute)
+                = ($local[5] + 1900, $local[4] + 1, $local[3], $local[2], $local[1]);
+        }
         return {
             year => 0 + $year,
             month => 0 + $month,
@@ -117,6 +136,9 @@ for my $line (split /\n/, $ics) {
     my ($name) = split /;/, $left;
     $name = uc $name;
     push @{ $current->{$name} }, $value;
+    if ($name eq 'DTSTART' && $left =~ /(?:^|;)TZID=([^;:]+)/i) {
+        push @{ $current->{DTSTART_TZID} }, $1;
+    }
 }
 
 my $window_start = ordinal($year, $month, 1);
@@ -129,7 +151,8 @@ my %output;
 EVENT:
 for my $event (@raw_events) {
     next if (($event->{STATUS} // [])->[0] // '') eq 'CANCELLED';
-    my $start = parse_date_value(($event->{DTSTART} // [])->[0]);
+    my $start_tzid = ($event->{DTSTART_TZID} // [])->[0];
+    my $start = parse_date_value(($event->{DTSTART} // [])->[0], $start_tzid);
     next unless $start;
 
     my $summary = unescape_text(($event->{SUMMARY} // ['Untitled'])->[0]);
@@ -137,7 +160,7 @@ for my $event (@raw_events) {
     my %excluded;
     for my $raw (@{ $event->{EXDATE} // [] }) {
         for my $value (split /,/, $raw) {
-            my $date = parse_date_value($value);
+            my $date = parse_date_value($value, $start_tzid);
             $excluded{date_key($date->{year}, $date->{month}, $date->{day})} = 1 if $date;
         }
     }
