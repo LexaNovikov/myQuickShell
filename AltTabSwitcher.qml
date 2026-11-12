@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -15,24 +16,38 @@ PanelWindow {
     property bool displaying: false
     property bool cardsReady: false
     property bool hadKeyboardFocus: false
+    property bool altMonitorReady: false
+    property bool altHeld: false
+    property double lastAltReleaseAt: 0
+    property bool releasePending: false
     property bool initializingSelection: false
     property var pendingFocusId: null
     property real reveal: shown ? 1 : 0
     readonly property int tileSize: 88
     readonly property int tileStep: 100
-    readonly property int panelPadding: 24
+    readonly property int panelPadding: 18
 
     screen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
     implicitWidth: Math.min((screen ? screen.width : 1920) - 32, 712)
     implicitHeight: 190
     color: "transparent"
-    visible: displaying
-    focusable: shown
+    visible: true
     exclusiveZone: 0
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-alt-tab"
+    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    mask: Region {
+        x: panelBackground.x
+        y: panelBackground.y
+        width: switcher.displaying ? panelBackground.width : 0
+        height: switcher.displaying ? panelBackground.height : 0
+        radius: panelBackground.radius
+    }
     BackgroundEffect.blurRegion: Region {
-        item: panelBackground
+        x: panelBackground.x
+        y: panelBackground.y
+        width: switcher.displaying && switcher.cardsReady ? panelBackground.width : 0
+        height: switcher.displaying && switcher.cardsReady ? panelBackground.height : 0
         radius: panelBackground.radius
     }
 
@@ -79,6 +94,8 @@ PanelWindow {
             shown = true
             focusDelay.restart()
             focusWatchdog.restart()
+            if (Date.now() - lastAltReleaseAt < 350 && !altHeld)
+                requestCommit()
             windowQuery.running = true
         }
     }
@@ -104,6 +121,15 @@ PanelWindow {
         close()
     }
 
+    function requestCommit() {
+        if (!shown) return
+        if (cardsReady) {
+            commit()
+            return
+        }
+        releasePending = true
+    }
+
     function sendFocus() {
         if (pendingFocusId === null) return
         focusCommand.command = ["niri", "msg", "action", "focus-window", "--id", String(pendingFocusId)]
@@ -117,6 +143,8 @@ PanelWindow {
         pendingSteps = 0
         commitWhenLoaded = false
         focusWatchdog.stop()
+        finishRelease.stop()
+        releasePending = false
         showCards.stop()
         hideAfterClose.restart()
     }
@@ -167,6 +195,41 @@ PanelWindow {
         onExited: Qt.callLater(() => switcher.sendFocus())
     }
 
+    Process {
+        id: altKeyMonitor
+        command: ["/usr/bin/python3", Quickshell.shellPath("alt-tab-key-monitor.py")]
+        running: true
+        onExited: {
+            switcher.altMonitorReady = false
+            switcher.altHeld = false
+        }
+        stdout: SplitParser {
+            onRead: data => {
+                const state = data.trim()
+                if (state === "ready") switcher.altMonitorReady = true
+                else if (state === "down") {
+                    switcher.altHeld = true
+                    switcher.releasePending = false
+                    finishRelease.stop()
+                }
+                else if (state === "up") {
+                    switcher.altHeld = false
+                    switcher.lastAltReleaseAt = Date.now()
+                    switcher.requestCommit()
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: finishRelease
+        interval: 35
+        onTriggered: {
+            if (switcher.shown && switcher.releasePending && !switcher.altHeld)
+                switcher.commit()
+        }
+    }
+
     Timer {
         id: focusDelay
         interval: 1
@@ -179,7 +242,7 @@ PanelWindow {
         onTriggered: {
             // A very quick Alt+Tab can release Alt before Wayland grants focus.
             if (switcher.shown && !switcher.hadKeyboardFocus)
-                switcher.commit()
+                switcher.requestCommit()
         }
     }
 
@@ -189,6 +252,8 @@ PanelWindow {
         onTriggered: {
             if (switcher.shown && switcher.windows.length > 0)
                 switcher.cardsReady = true
+            if (switcher.cardsReady && switcher.releasePending)
+                finishRelease.restart()
         }
     }
 
@@ -224,7 +289,7 @@ PanelWindow {
 
         Keys.onReleased: event => {
             if (event.key === Qt.Key_Alt && !event.isAutoRepeat) {
-                switcher.commit()
+                switcher.requestCommit()
                 event.accepted = true
             }
         }
@@ -235,12 +300,29 @@ PanelWindow {
             y: rail.y - switcher.panelPadding
             width: rail.width + switcher.panelPadding * 2
             height: rail.height + switcher.panelPadding * 2
-            radius: 25
+            radius: 18
             color: "#800b0e0d"
-            border.width: 1
-            border.color: "#53635e"
             opacity: switcher.reveal
             visible: switcher.cardsReady
+        }
+
+        Rectangle {
+            anchors.fill: panelBackground
+            radius: panelBackground.radius
+            color: "transparent"
+            border.width: 1
+            border.color: "#66ffffff"
+            opacity: panelBackground.opacity
+            visible: panelBackground.visible
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#66ffffff"
+                shadowBlur: 0.65
+                blurMax: 8
+                shadowVerticalOffset: 0
+                shadowHorizontalOffset: 0
+            }
         }
 
         Flickable {
@@ -311,7 +393,7 @@ PanelWindow {
                    - rail.contentX + switcher.tileSize / 2 - rail.width / 2)
                - switcher.tileSize / 2
             y: rail.y + rail.height / 2
-               + rail.scale * (switcher.tileSize / 2 + 4)
+               + rail.scale * (switcher.tileSize / 2 + 2)
             width: switcher.tileSize
             text: switcher.windows.length > 0
                 ? switcher.appName(switcher.windows[switcher.selectedIndex]) : ""

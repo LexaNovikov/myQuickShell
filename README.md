@@ -127,7 +127,7 @@ spawn-at-startup "qs" "-d"
 
 ## Alt+Tab на другом компьютере
 
-Скопируйте весь каталог `~/.config/quickshell`, включая `AltTabSwitcher.qml` и `shell.qml`. Для размытия нужен Niri 26.04 или новее, а для интерфейса — Quickshell 0.3.2 или новее. Шрифт SF Pro Rounded установите по инструкции выше.
+Скопируйте весь каталог `~/.config/quickshell`, включая `AltTabSwitcher.qml`, `alt-tab-key-monitor.py` и `shell.qml`. Для размытия нужен Niri 26.04 или новее, а для интерфейса — Quickshell 0.3.2 или новее. Для закрытия Alt+Tab при быстром отпускании Alt нужен системный Python с модулем `gi` (PyGObject), например пакет `python-gobject` в Arch Linux. Шрифт SF Pro Rounded установите по инструкции выше.
 
 В `~/.config/niri/config.kdl` добавьте правило **вне** блока `binds {}`:
 
