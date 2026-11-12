@@ -358,7 +358,7 @@ PanelWindow {
                             id: iconTile
                             width: parent.width
                             height: switcher.tileSize
-                            radius: 19
+                            radius: 14
                             color: parent.selected ? "#a0294b40"
                                    : (iconMouse.containsMouse ? "#7526302c" : "transparent")
                             border.width: parent.selected ? 2 : 0
