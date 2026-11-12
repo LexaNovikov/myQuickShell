@@ -125,6 +125,39 @@ spawn-at-startup "qs" "-d"
 
 После изменения конфигурации Niri перезапустите сеанс или один раз выполните `qs -d` вручную.
 
+## Alt+Tab на другом компьютере
+
+Скопируйте весь каталог `~/.config/quickshell`, включая `AltTabSwitcher.qml` и `shell.qml`. Для размытия нужен Niri 26.04 или новее, а для интерфейса — Quickshell 0.3.2 или новее. Шрифт SF Pro Rounded установите по инструкции выше.
+
+В `~/.config/niri/config.kdl` добавьте правило **вне** блока `binds {}`:
+
+```kdl
+layer-rule {
+    match namespace="^quickshell-alt-tab$"
+    background-effect {
+        xray false
+    }
+}
+```
+
+Внутри блока `binds {}` добавьте или замените бинды:
+
+```kdl
+Alt+Tab { spawn-sh "quickshell ipc call altTab next >/dev/null 2>&1 || niri msg action focus-window-previous"; }
+Alt+Shift+Tab { spawn-sh "quickshell ipc call altTab previous >/dev/null 2>&1 || niri msg action focus-window-previous"; }
+```
+
+Quickshell сам запрашивает блюр только за скруглённой панелью; правило Niri разрешает размывать окна под ней. Проверьте конфигурацию и примените её:
+
+```bash
+niri validate -c ~/.config/niri/config.kdl
+niri msg action load-config-file
+qs kill
+qs -d
+```
+
+Если иконка PyCharm отсутствует, проверьте путь `/opt/pycharm/bin/pycharm.svg` в `AltTabSwitcher.qml`: он может отличаться на другом компьютере.
+
 ## Google Calendar
 
 1. В Google Calendar откройте настройки нужного календаря.
