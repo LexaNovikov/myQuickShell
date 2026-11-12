@@ -19,6 +19,10 @@ ShellRoot {
     property string nightModeFrom: "21:00:00"
     property string nightModeTo: "07:00:00"
 
+    AltTabSwitcher {
+        accentColor: shellRoot.accentColor
+    }
+
     IdleMonitor {
         timeout: 300
         onIsIdleChanged: {
@@ -1543,9 +1547,11 @@ ShellRoot {
                                 anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignHCenter
-                                text: island.truncatedNotificationText(parent.modelData.text, 26)
+                                text: island.normalizedNotificationText(parent.modelData.text) === "Пометить как прочитанное"
+                                    ? "Mark as read"
+                                    : island.truncatedNotificationText(parent.modelData.text, 26)
                                 color: "#d0d0d0"
-                                font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
+                                font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 14
                                 elide: Text.ElideRight
                                 textFormat: Text.PlainText
                             }
@@ -1570,7 +1576,7 @@ ShellRoot {
                             anchors.centerIn: parent
                             text: "Reply"
                             color: "#050505"
-                            font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 12
+                            font.family: "SF Pro Rounded"; font.bold: true; font.pixelSize: 14
                         }
                         MouseArea {
                             cursorShape: Qt.PointingHandCursor
@@ -1591,7 +1597,7 @@ ShellRoot {
                         id: notificationReplyInput
                         anchors { left: parent.left; right: replySend.left; verticalCenter: parent.verticalCenter; leftMargin: 14; rightMargin: 10 }
                         color: "#ffffff"
-                        font.family: "SF Pro Rounded"; font.pixelSize: 13
+                        font.family: "SF Pro Rounded"; font.pixelSize: 15
                         clip: true
                         selectByMouse: true
                         enabled: island.notificationReplyOpen

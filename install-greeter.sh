@@ -17,7 +17,21 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+install_greeter_ui() {
+    install -d -m 755 "$target_dir"
+    install -m 644 "$source_dir/shell.qml" "$target_dir/shell.qml"
+    install -m 755 "$source_dir/session-manager.sh" "$target_dir/session-manager.sh"
+}
+
 case "$action" in
+    update-ui)
+        if [[ ! -f "$target_dir/shell.qml" ]]; then
+            echo "Quickshell greeter is not installed in $target_dir" >&2
+            exit 2
+        fi
+        install_greeter_ui
+        echo "Greeter interface and session selector updated; they will apply at the next login."
+        ;;
     update-auth)
         if [[ ! -f "$target_dir/shell.qml" ]]; then
             echo "Quickshell greeter is not installed in $target_dir" >&2
@@ -62,8 +76,7 @@ case "$action" in
             install -m 600 /etc/pam.d/greetd "$backup_dir/greetd.pam"
         fi
 
-        install -d -m 755 "$target_dir"
-        install -m 644 "$source_dir/shell.qml" "$target_dir/shell.qml"
+        install_greeter_ui
         printf '%s\n' "$login_user" > "$target_dir/default-user"
         chmod 644 "$target_dir/default-user"
 
@@ -116,7 +129,7 @@ case "$action" in
         ;;
 
     *)
-        echo "Usage: $0 {preview|install [USER]|update-auth|restore-sddm|restore-greetd-config}" >&2
+        echo "Usage: $0 {preview|install [USER]|update-ui|update-auth|restore-sddm|restore-greetd-config}" >&2
         exit 2
         ;;
 esac

@@ -23,6 +23,10 @@ ShellRoot {
     property int exitAnimationGeneration: 0
     property int restoreAnimationGeneration: 0
     property bool launching: false
+    property var sessionChoices: []
+    property var selectedSession: ({ kind: "wayland", id: "niri", name: "Niri", desktopNames: "niri" })
+    property var launchSession: null
+    property bool sessionMenuOpen: false
 
     function startFingerprintAuthentication() {
         if (!Greetd.available || Greetd.state !== GreetdState.Inactive) return
@@ -146,7 +150,9 @@ ShellRoot {
             greeterRoot.responsePending = false
             greeterRoot.restartWithPassword = false
             greeterRoot.statusIsError = false
-            greeterRoot.statusText = "Starting Niri…"
+            greeterRoot.launchSession = greeterRoot.selectedSession
+            greeterRoot.sessionMenuOpen = false
+            greeterRoot.statusText = "Starting " + greeterRoot.launchSession.name + "…"
             greeterRoot.launching = true
             greeterRoot.exitAnimationGeneration++
             launchAfterAnimation.restart()
@@ -155,6 +161,7 @@ ShellRoot {
         function onError(error) {
             let wasLaunching = greeterRoot.launching
             greeterRoot.launching = false
+            greeterRoot.launchSession = null
             launchAfterAnimation.stop()
             if (wasLaunching)
                 greeterRoot.restoreAnimationGeneration++
@@ -177,14 +184,40 @@ ShellRoot {
         id: launchAfterAnimation
         interval: 480
         onTriggered: {
+            let session = greeterRoot.launchSession
+            if (!session) return
             Greetd.launch(
-                ["/usr/bin/niri-session"],
+                [Quickshell.shellPath("session-manager.sh"), "launch", session.kind, session.id],
                 [
-                    "XDG_SESSION_TYPE=wayland",
-                    "XDG_CURRENT_DESKTOP=niri",
-                    "XDG_SESSION_DESKTOP=niri"
+                    "XDG_SESSION_TYPE=" + session.kind,
+                    "XDG_CURRENT_DESKTOP=" + session.desktopNames,
+                    "XDG_SESSION_DESKTOP=" + session.id,
+                    "DESKTOP_SESSION=" + session.id
                 ]
             )
+        }
+    }
+
+    Process {
+        id: sessionDiscovery
+        command: [Quickshell.shellPath("session-manager.sh"), "list"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let sessions = []
+                for (let line of this.text.trim().split("\n")) {
+                    let fields = line.split("\t")
+                    if (fields.length !== 4) continue
+                    sessions.push({
+                        kind: fields[0], id: fields[1],
+                        name: fields[2], desktopNames: fields[3]
+                    })
+                }
+                if (sessions.length === 0) return
+                greeterRoot.sessionChoices = sessions
+                let niri = sessions.find(session => session.id === "niri" && session.kind === "wayland")
+                greeterRoot.selectedSession = niri || sessions[0]
+            }
         }
     }
 
@@ -386,6 +419,7 @@ ShellRoot {
 
             Column {
                 id: loginCard
+                z: 2
                 anchors {
                     horizontalCenter: parent.horizontalCenter
                     top: parent.top
@@ -656,6 +690,126 @@ ShellRoot {
                         || !Greetd.available ? 1 : 0
 
                     Behavior on opacity { NumberAnimation { duration: 160 } }
+                }
+
+                Item {
+                    id: sessionPicker
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(244, loginCard.width)
+                    height: 40
+                    z: 3
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 20
+                        color: sessionMouse.containsMouse || greeterRoot.sessionMenuOpen
+                            ? "#242424" : "#171717"
+                        border.width: 1
+                        border.color: greeterRoot.sessionMenuOpen ? "#00d6a4" : "#343434"
+
+                        Behavior on color { ColorAnimation { duration: 140 } }
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 9
+
+                        Text {
+                            text: greeterRoot.selectedSession.name
+                                + (greeterRoot.selectedSession.kind === "x11" ? " (X11)" : "")
+                            color: "#d8d8d8"
+                            font.family: "SF Pro Rounded"
+                            font.weight: Font.Medium
+                            font.pixelSize: 14
+                        }
+
+                        Text {
+                            text: greeterRoot.sessionChoices.length > 1
+                                ? (greeterRoot.sessionMenuOpen ? "⌃" : "⌄") : ""
+                            color: "#00d6a4"
+                            font.family: "SF Pro Rounded"
+                            font.pixelSize: 18
+                        }
+                    }
+
+                    MouseArea {
+                        id: sessionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: !greeterRoot.launching && greeterRoot.sessionChoices.length > 1
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: greeterRoot.sessionMenuOpen = !greeterRoot.sessionMenuOpen
+                    }
+
+                    Rectangle {
+                        id: sessionMenu
+                        anchors {
+                            horizontalCenter: parent.horizontalCenter
+                            top: parent.bottom
+                            topMargin: 7
+                        }
+                        width: parent.width
+                        height: Math.min(sessionList.contentHeight + 10, 220)
+                        radius: 18
+                        color: "#171717"
+                        border.width: 1
+                        border.color: "#343434"
+                        visible: greeterRoot.sessionMenuOpen || opacity > 0
+                        opacity: greeterRoot.sessionMenuOpen ? 1 : 0
+                        scale: greeterRoot.sessionMenuOpen ? 1 : 0.94
+                        transformOrigin: Item.Top
+                        clip: true
+
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+                        ListView {
+                            id: sessionList
+                            anchors.fill: parent
+                            anchors.margins: 5
+                            model: greeterRoot.sessionChoices
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: sessionList.width
+                                height: 39
+                                radius: 13
+                                color: sessionOptionMouse.containsMouse
+                                    ? "#303030"
+                                    : (greeterRoot.selectedSession.kind === modelData.kind
+                                        && greeterRoot.selectedSession.id === modelData.id
+                                        ? "#20493e" : "transparent")
+
+                                Text {
+                                    anchors {
+                                        left: parent.left
+                                        leftMargin: 13
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    text: modelData.name + (modelData.kind === "x11" ? " (X11)" : "")
+                                    color: "#eeeeee"
+                                    font.family: "SF Pro Rounded"
+                                    font.pixelSize: 14
+                                    elide: Text.ElideRight
+                                    width: parent.width - 26
+                                }
+
+                                MouseArea {
+                                    id: sessionOptionMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        greeterRoot.selectedSession = modelData
+                                        greeterRoot.sessionMenuOpen = false
+                                        passwordInput.forceActiveFocus(Qt.OtherFocusReason)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
