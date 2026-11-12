@@ -710,25 +710,46 @@ ShellRoot {
                         Behavior on color { ColorAnimation { duration: 140 } }
                     }
 
-                    Row {
+                    Item {
                         anchors.centerIn: parent
-                        spacing: 9
+                        width: Math.min(sessionTitle.implicitWidth
+                                        + (sessionArrow.visible ? 19 : 0), parent.width - 24)
+                        height: 20
 
                         Text {
+                            id: sessionTitle
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - (sessionArrow.visible ? 19 : 0)
                             text: greeterRoot.selectedSession.name
                                 + (greeterRoot.selectedSession.kind === "x11" ? " (X11)" : "")
                             color: "#d8d8d8"
                             font.family: "SF Pro Rounded"
                             font.weight: Font.Medium
                             font.pixelSize: 14
+                            elide: Text.ElideRight
                         }
 
-                        Text {
-                            text: greeterRoot.sessionChoices.length > 1
-                                ? (greeterRoot.sessionMenuOpen ? "⌃" : "⌄") : ""
-                            color: "#00d6a4"
-                            font.family: "SF Pro Rounded"
-                            font.pixelSize: 18
+                        Canvas {
+                            id: sessionArrow
+                            x: sessionTitle.width + 9
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 10
+                            height: 8
+                            visible: greeterRoot.sessionChoices.length > 1
+                            rotation: greeterRoot.sessionMenuOpen ? 180 : 0
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.strokeStyle = "#00d6a4"
+                                ctx.lineWidth = 2
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(1, 2)
+                                ctx.lineTo(5, 6)
+                                ctx.lineTo(9, 2)
+                                ctx.stroke()
+                            }
+                            Behavior on rotation { NumberAnimation { duration: 140 } }
                         }
                     }
 
