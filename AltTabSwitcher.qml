@@ -26,12 +26,23 @@ PanelWindow {
     readonly property int tileSize: 88
     readonly property int tileStep: 100
     readonly property int panelPadding: 18
+    readonly property var usableScreen: findUsableScreen()
 
-    screen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    function findUsableScreen() {
+        const screens = Quickshell.screens
+        for (let i = 0; i < screens.length; ++i) {
+            const candidate = screens[i]
+            if (candidate.name && candidate.width > 0 && candidate.height > 0)
+                return candidate
+        }
+        return null
+    }
+
+    screen: usableScreen
     implicitWidth: Math.min((screen ? screen.width : 1920) - 32, 712)
     implicitHeight: 190
     color: "transparent"
-    visible: true
+    visible: usableScreen !== null
     exclusiveZone: 0
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-alt-tab"

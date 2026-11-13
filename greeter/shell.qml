@@ -154,15 +154,15 @@ ShellRoot {
             greeterRoot.sessionMenuOpen = false
             greeterRoot.statusText = "Starting " + greeterRoot.launchSession.name + "…"
             greeterRoot.launching = true
+            greeterRestoreAnimation.stop()
             greeterRoot.exitAnimationGeneration++
-            launchAfterAnimation.restart()
         }
 
         function onError(error) {
             let wasLaunching = greeterRoot.launching
             greeterRoot.launching = false
             greeterRoot.launchSession = null
-            launchAfterAnimation.stop()
+            greeterExitAnimation.stop()
             if (wasLaunching)
                 greeterRoot.restoreAnimationGeneration++
             if (greeterRoot.restartWithPassword) {
@@ -177,24 +177,6 @@ ShellRoot {
             if (Greetd.state === GreetdState.Inactive
                     && greeterRoot.restartWithPassword)
                 passwordSessionRestart.restart()
-        }
-    }
-
-    Timer {
-        id: launchAfterAnimation
-        interval: 480
-        onTriggered: {
-            let session = greeterRoot.launchSession
-            if (!session) return
-            Greetd.launch(
-                [Quickshell.shellPath("session-manager.sh"), "launch", session.kind, session.id],
-                [
-                    "XDG_SESSION_TYPE=" + session.kind,
-                    "XDG_CURRENT_DESKTOP=" + session.desktopNames,
-                    "XDG_SESSION_DESKTOP=" + session.id,
-                    "DESKTOP_SESSION=" + session.id
-                ]
-            )
         }
     }
 
@@ -911,51 +893,65 @@ ShellRoot {
 
             ParallelAnimation {
                 id: greeterExitAnimation
+                onFinished: {
+                    if (!greeterRoot.launching) return
+                    let session = greeterRoot.launchSession
+                    if (!session) return
+                    Greetd.launch(
+                        [Quickshell.shellPath("session-manager.sh"), "launch", session.kind, session.id],
+                        [
+                            "XDG_SESSION_TYPE=" + session.kind,
+                            "XDG_CURRENT_DESKTOP=" + session.desktopNames,
+                            "XDG_SESSION_DESKTOP=" + session.id,
+                            "DESKTOP_SESSION=" + session.id
+                        ]
+                    )
+                }
 
                 ParallelAnimation {
                     NumberAnimation {
                         target: clockBlock
                         property: "opacity"
                         to: 0
-                        duration: 190
+                        duration: 100
                         easing.type: Easing.InCubic
                     }
                     NumberAnimation {
                         target: clockEnterOffset
                         property: "y"
                         to: -14
-                        duration: 260
+                        duration: 150
                         easing.type: Easing.InCubic
                     }
                     NumberAnimation {
                         target: loginCard
                         property: "opacity"
                         to: 0
-                        duration: 210
+                        duration: 110
                         easing.type: Easing.InCubic
                     }
                     NumberAnimation {
                         target: loginCard
                         property: "scale"
                         to: 0.94
-                        duration: 280
+                        duration: 150
                         easing.type: Easing.InCubic
                     }
                     NumberAnimation {
                         target: powerActions
                         property: "opacity"
                         to: 0
-                        duration: 150
+                        duration: 90
                     }
                 }
 
                 SequentialAnimation {
-                    PauseAnimation { duration: 110 }
+                    PauseAnimation { duration: 30 }
                     NumberAnimation {
                         target: backgroundCanvas
                         property: "opacity"
                         to: 0
-                        duration: 330
+                        duration: 120
                         easing.type: Easing.InOutCubic
                     }
                 }
