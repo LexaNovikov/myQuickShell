@@ -2092,7 +2092,7 @@ ShellRoot {
             }
 
             Item {
-                anchors { top: parent.top; left: parent.left; topMargin: 8; leftMargin: 3 }
+                anchors { top: parent.top; left: parent.left; topMargin: 8; leftMargin: 5 }
                 width: 26
                 height: 16
                 visible: controlCenter.batteryPresent
