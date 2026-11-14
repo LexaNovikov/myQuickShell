@@ -74,7 +74,25 @@ PanelWindow {
     function iconSource(appId) {
         if (appId === "jetbrains-pycharm")
             return "file:///opt/pycharm/bin/pycharm.svg"
-        return Quickshell.iconPath(appId || "", "application-x-executable")
+
+        const id = String(appId || "").trim()
+        const lower = id.toLowerCase()
+        const entry = DesktopEntries.byId(id) || DesktopEntries.byId(lower)
+                   || DesktopEntries.heuristicLookup(id)
+                   || DesktopEntries.heuristicLookup(lower)
+        const names = []
+        if (entry && entry.icon) names.push(entry.icon)
+        names.push(id, lower)
+        if (id.includes(".")) names.push(id.split(".").pop().toLowerCase())
+
+        for (const name of names) {
+            if (!name) continue
+            if (name.startsWith("file://")) return name
+            if (name.startsWith("/")) return "file://" + name
+            const icon = Quickshell.iconPath(name, true)
+            if (icon) return icon
+        }
+        return ""
     }
 
     function appName(windowData) {
@@ -328,7 +346,7 @@ PanelWindow {
             layer.enabled: true
             layer.effect: MultiEffect {
                 shadowEnabled: true
-                shadowColor: "#66ffffff"
+                shadowColor: "#ffffff"
                 shadowBlur: 0.65
                 blurMax: 8
                 shadowVerticalOffset: 0
@@ -376,10 +394,21 @@ PanelWindow {
                             border.color: switcher.accentColor
 
                             IconImage {
+                                id: appIcon
                                 anchors.centerIn: parent
                                 width: 72
                                 height: 72
                                 source: switcher.iconSource(modelData.app_id)
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: appIcon.status !== Image.Ready
+                                text: switcher.appName(modelData).charAt(0).toUpperCase()
+                                color: "#e6e6e6"
+                                font.family: "SF Pro Rounded"
+                                font.weight: Font.Bold
+                                font.pixelSize: 44
                             }
                         }
 

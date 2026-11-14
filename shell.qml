@@ -1,3 +1,4 @@
+//@ pragma UseQApplication
 import QtQuick
 import QtQuick.Effects
 import Quickshell
@@ -5,6 +6,7 @@ import QtQuick.Controls
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Notifications
+import Quickshell.Services.SystemTray
 import Quickshell.Widgets
 import Quickshell.Wayland
 
@@ -211,6 +213,16 @@ ShellRoot {
                 item: controlWidget
                 radius: controlWidget.radius
             }
+
+            Region {
+                item: trayIsland
+                radius: trayIsland.radius
+            }
+        }
+
+        TrayMenu {
+            id: trayMenuPopup
+            accentColor: shellRoot.accentColor
         }
 
         Rectangle {
@@ -259,6 +271,83 @@ ShellRoot {
                 shadowVerticalOffset: 0
                 shadowHorizontalOffset: 0
             }
+        }
+
+        Rectangle {
+            anchors.fill: trayIsland
+            radius: trayIsland.radius
+            color: "#000000"
+            visible: trayIsland.visible
+            z: -1
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#66ffffff"
+                shadowBlur: 0.65
+                blurMax: 8
+                shadowVerticalOffset: 0
+                shadowHorizontalOffset: 0
+            }
+        }
+
+        // Отдельный островок трея в правом углу экрана.
+        Rectangle {
+            id: trayIsland
+            anchors { top: parent.top; topMargin: 10; right: parent.right; rightMargin: 16 }
+            width: trayRow.implicitWidth + 34
+            height: 32
+            radius: 16
+            color: "#000000"
+            visible: trayRow.implicitWidth > 0
+                && x >= Math.max(controlWidget.x + controlWidget.width,
+                                 island.x + island.width) + 8
+            onVisibleChanged: if (!visible) trayMenuPopup.visible = false
+
+            Row {
+                id: trayRow
+                anchors { left: parent.left; leftMargin: 17; verticalCenter: parent.verticalCenter }
+                spacing: 5
+
+                Repeater {
+                    model: SystemTray.items
+
+                    delegate: Item {
+                        id: trayIcon
+                        required property var modelData
+                        width: 19
+                        height: 24
+
+                        Image {
+                            anchors.centerIn: parent
+                            width: 16
+                            height: 16
+                            source: parent.modelData.icon
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
+
+                        MouseArea {
+                            id: trayMouse
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: mouse => {
+                                let item = parent.modelData
+                                if (mouse.button === Qt.MiddleButton) {
+                                    item.secondaryActivate()
+                                } else if (mouse.button === Qt.RightButton || item.onlyMenu) {
+                                    trayMenuPopup.openFor(item, trayIcon, mainWindow)
+                                } else {
+                                    item.activate()
+                                }
+                            }
+                            onWheel: wheel => parent.modelData.scroll(wheel.angleDelta.y, false)
+                        }
+                    }
+                }
+            }
+
         }
 
         // 1. Иконка плеера слева
@@ -1997,8 +2086,46 @@ ShellRoot {
                 source: Quickshell.shellPath("assets/wifi.png")
                 sourceSize.width: 26; sourceSize.height: 26
                 smooth: true
+                visible: !controlCenter.batteryPresent
                 opacity: controlCenter.isOpen ? 0 : (controlCenter.wifiEnabled ? 1 : 0.4)
                 Behavior on opacity { NumberAnimation { duration: 150 } }
+            }
+
+            Item {
+                anchors { top: parent.top; left: parent.left; topMargin: 8; leftMargin: 3 }
+                width: 27
+                height: 16
+                visible: controlCenter.batteryPresent
+                opacity: controlCenter.isOpen ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                Rectangle {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    width: 22
+                    height: 12
+                    radius: 3
+                    color: "transparent"
+                    border.width: 1
+                    border.color: shellRoot.accentColor
+
+                    Rectangle {
+                        anchors { left: parent.left; leftMargin: 2; verticalCenter: parent.verticalCenter }
+                        width: Math.round(16 * Math.max(0, Math.min(100, controlCenter.batteryPercent)) / 100)
+                        height: 8
+                        radius: 1.5
+                        color: controlCenter.batteryPercent <= 20
+                            && controlCenter.batteryStatus === "discharging" ? "#ed414b" : shellRoot.accentColor
+                        Behavior on width { NumberAnimation { duration: 220 } }
+                    }
+                }
+
+                Rectangle {
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    width: 2
+                    height: 5
+                    radius: 1
+                    color: shellRoot.accentColor
+                }
             }
             MouseArea {
                 cursorShape: Qt.PointingHandCursor
