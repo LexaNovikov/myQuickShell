@@ -25,6 +25,10 @@ ShellRoot {
         accentColor: shellRoot.accentColor
     }
 
+    EmojiPicker {
+        accentColor: shellRoot.accentColor
+    }
+
     IdleMonitor {
         timeout: 300
         onIsIdleChanged: {

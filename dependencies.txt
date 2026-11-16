@@ -16,5 +16,7 @@ power-profiles-daemon
 perl
 curl
 fontconfig
+noto-fonts-emoji
+wtype
 systemd
 fprintd
