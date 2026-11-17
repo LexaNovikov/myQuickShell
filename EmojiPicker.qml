@@ -333,9 +333,9 @@ PanelWindow {
                             anchors.centerIn: parent
                             visible: parent.modelData.id !== "all" && parent.modelData.id !== "recent"
                             anchors.horizontalCenterOffset: fluentFont.status === FontLoader.Ready
-                                && parent.modelData.id !== "flags" ? 1 : 0
+                                && parent.modelData.id !== "flags" ? 4 : 0
                             anchors.verticalCenterOffset: fluentFont.status === FontLoader.Ready
-                                && parent.modelData.id !== "flags" ? -9 : 0
+                                && parent.modelData.id !== "flags" ? -4 : 0
                             text: parent.modelData.icon
                             color: picker.category === parent.modelData.id ? picker.accentColor : "#aaaaaa"
                             font.family: parent.modelData.id === "flags"
@@ -423,9 +423,9 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         anchors.horizontalCenterOffset: parent.modelData.category === "flags"
-                            || fluentFont.status !== FontLoader.Ready ? 0 : 2
+                            || fluentFont.status !== FontLoader.Ready ? 0 : 3
                         anchors.verticalCenterOffset: parent.modelData.category === "flags"
-                            || fluentFont.status !== FontLoader.Ready ? 0 : -19
+                            || fluentFont.status !== FontLoader.Ready ? 0 : -9
                         text: parent.modelData.emoji
                         font.family: parent.modelData.category === "flags"
                             ? "Noto Color Emoji" : picker.emojiFontFamily
