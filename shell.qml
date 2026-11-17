@@ -13,6 +13,20 @@ import Quickshell.Wayland
 ShellRoot {
     id: shellRoot
     property string accentColor: "#25d8a3"
+    property bool panelBlurEnabled: false
+    property bool panelAccentBackground: false
+    readonly property color panelAccentTone: accentColor
+    readonly property color panelSurfaceColor: Qt.rgba(
+        panelAccentBackground ? panelAccentTone.r * 0.38 : 0,
+        panelAccentBackground ? panelAccentTone.g * 0.38 : 0,
+        panelAccentBackground ? panelAccentTone.b * 0.38 : 0,
+        panelBlurEnabled ? 0.48 : 1)
+    readonly property color panelCardColor: panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.20) : "#161616"
+    readonly property color panelInsetColor: panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.20) : "#000000"
+    readonly property color panelInsetHoverColor: panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.32) : "#080808"
+    readonly property color panelTrackColor: panelBlurEnabled ? panelInsetColor : "#050505"
+    readonly property color panelFieldColor: panelBlurEnabled ? panelInsetColor : "#090909"
+    readonly property color panelPopupColor: panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.45) : "#080808"
     property string selectedWallpaper: ""
     property bool smartPaletteEnabled: false
     property bool nightModeForced: false
@@ -224,6 +238,23 @@ ShellRoot {
             }
         }
 
+        BackgroundEffect.blurRegion: Region {
+            item: shellRoot.panelBlurEnabled ? island : null
+            radius: island.radius
+            Region {
+                item: shellRoot.panelBlurEnabled ? playerWidget : null
+                radius: playerWidget.radius
+            }
+            Region {
+                item: shellRoot.panelBlurEnabled ? controlWidget : null
+                radius: controlWidget.radius
+            }
+            Region {
+                item: shellRoot.panelBlurEnabled && trayIsland.visible ? trayIsland : null
+                radius: trayIsland.radius
+            }
+        }
+
         TrayMenu {
             id: trayMenuPopup
             accentColor: shellRoot.accentColor
@@ -232,7 +263,7 @@ ShellRoot {
         Rectangle {
             anchors.fill: playerWidget
             radius: playerWidget.radius
-            color: "#000000"
+            color: shellRoot.panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.08) : shellRoot.panelSurfaceColor
             z: -1
             layer.enabled: true
             layer.effect: MultiEffect {
@@ -248,7 +279,7 @@ ShellRoot {
         Rectangle {
             anchors.fill: island
             radius: island.radius
-            color: "#000000"
+            color: shellRoot.panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.08) : shellRoot.panelSurfaceColor
             z: -1
             layer.enabled: true
             layer.effect: MultiEffect {
@@ -264,7 +295,7 @@ ShellRoot {
         Rectangle {
             anchors.fill: controlWidget
             radius: controlWidget.radius
-            color: "#000000"
+            color: shellRoot.panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.08) : shellRoot.panelSurfaceColor
             z: -1
             layer.enabled: true
             layer.effect: MultiEffect {
@@ -280,7 +311,7 @@ ShellRoot {
         Rectangle {
             anchors.fill: trayIsland
             radius: trayIsland.radius
-            color: "#000000"
+            color: shellRoot.panelBlurEnabled ? Qt.rgba(0, 0, 0, 0.08) : shellRoot.panelSurfaceColor
             visible: trayIsland.visible
             z: -1
             layer.enabled: true
@@ -301,7 +332,7 @@ ShellRoot {
             width: trayRow.implicitWidth + 34
             height: 32
             radius: 16
-            color: "#000000"
+            color: shellRoot.panelSurfaceColor
             visible: trayRow.implicitWidth > 0
                 && x >= Math.max(controlWidget.x + controlWidget.width,
                                  island.x + island.width) + 8
@@ -553,7 +584,8 @@ ShellRoot {
             width: expanded ? 360 : 32
             height: targetHeight
             radius: expanded ? 24 : 16
-            color: expanded ? "#0a0a0a" : "#000000"
+            color: expanded && !shellRoot.panelBlurEnabled && !shellRoot.panelAccentBackground
+                ? "#0a0a0a" : shellRoot.panelSurfaceColor
             clip: true
 
             anchors.top: island.top
@@ -1217,7 +1249,7 @@ ShellRoot {
             width: expanded ? 640 : (notificationVisible ? 380 : (systemOsdVisible ? 290 : 68))
             height: targetHeight
             radius: expanded ? 34 : (notificationVisible ? 26 : (systemOsdVisible ? 26 : 16))
-            color: "#000000"
+            color: shellRoot.panelSurfaceColor
             clip: true
             onTargetHeightChanged: mainWindow.reserveIslandHeight(targetHeight)
             Component.onCompleted: mainWindow.reserveIslandHeight(targetHeight)
@@ -1793,7 +1825,7 @@ ShellRoot {
                     width: 373
                     height: parent.height
                     radius: 28
-                    color: "#161616"
+                    color: shellRoot.panelCardColor
 
                     Text {
                         anchors { top: parent.top; left: parent.left; right: calendarNavigation.left; topMargin: 20; leftMargin: 21; rightMargin: 6 }
@@ -1960,7 +1992,7 @@ ShellRoot {
                     width: 218
                     height: parent.height
                     radius: 28
-                    color: "#161616"
+                    color: shellRoot.panelCardColor
 
                     Text {
                         id: tasksTitle
@@ -1980,7 +2012,8 @@ ShellRoot {
                                 id: taskRow
                                 required property int index
                                 required property var modelData
-                                width: parent.width; height: 30; radius: 15; color: "#000000"
+                                width: parent.width; height: 30; radius: 15
+                                color: shellRoot.panelBlurEnabled ? "#66000000" : "#000000"
                                 opacity: 0
                                 transform: Translate { id: taskRise; y: 6 }
 
@@ -2069,7 +2102,7 @@ ShellRoot {
             width: controlCenter.isOpen ? 408 : 32
             height: targetHeight
             radius: controlCenter.isOpen ? 32 : 16
-            color: "#000000"
+            color: shellRoot.panelSurfaceColor
             clip: true
 
             onTargetHeightChanged: mainWindow.reserveControlHeight(targetHeight)
@@ -2275,7 +2308,7 @@ ShellRoot {
             readonly property int bluetoothMenuHeight: 32 + 52 + 8 + bluetoothSavedBlockHeight + 8 + bluetoothNewBlockHeight
             readonly property int nightModeMenuHeight: 210
             readonly property int powerMenuHeight: 368
-            readonly property int personalizationMenuHeight: customAccentOpen ? 504 : 448
+            readonly property int personalizationMenuHeight: customAccentOpen ? 600 : 544
             property var wallpapers: []
             property string wallpaperDirectory: ""
             property string selectedWallpaper: shellRoot.selectedWallpaper
@@ -2451,7 +2484,9 @@ ShellRoot {
                 personalizationSettingsFile.setText(JSON.stringify({
                     accent: shellRoot.accentColor,
                     wallpaper: selectedWallpaper,
-                    smartPalette: smartPaletteEnabled
+                    smartPalette: smartPaletteEnabled,
+                    panelBlur: shellRoot.panelBlurEnabled,
+                    panelAccentBackground: shellRoot.panelAccentBackground
                 }, null, 2))
             }
 
@@ -2466,6 +2501,8 @@ ShellRoot {
                     }
                     selectedWallpaper = settings.wallpaper || ""
                     smartPaletteEnabled = settings.smartPalette === true
+                    shellRoot.panelBlurEnabled = settings.panelBlur === true
+                    shellRoot.panelAccentBackground = settings.panelAccentBackground === true
                     if (selectedWallpaper !== "")
                         wallpaperRestoreDelay.restart()
                 } catch (error) {
@@ -3578,7 +3615,7 @@ ShellRoot {
                     spacing: 8
                     Rectangle {
                         id: wifiTile
-                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: shellRoot.panelCardColor
                         Row {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
@@ -3636,7 +3673,7 @@ ShellRoot {
                     }
                     Rectangle {
                         id: nightModeTile
-                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: shellRoot.panelCardColor
                         Row {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
@@ -3688,7 +3725,7 @@ ShellRoot {
                         }
                     }
                     Rectangle {
-                        width: 52; height: 52; radius: 26; color: "#161616"
+                        width: 52; height: 52; radius: 26; color: shellRoot.panelCardColor
 
                         Canvas {
                             anchors.centerIn: parent
@@ -3730,7 +3767,7 @@ ShellRoot {
                     spacing: 8
                     Rectangle {
                         id: bluetoothTile
-                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: shellRoot.panelCardColor
                         Row {
                             anchors.fill: parent; anchors.margins: 6; spacing: 8
                             Rectangle {
@@ -3789,7 +3826,7 @@ ShellRoot {
                     }
                     Rectangle {
                         id: usageTile
-                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: "#161616"
+                        width: controlCenter.wideTileWidth; height: 52; radius: 24; color: shellRoot.panelCardColor
                         Row {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                             spacing: 1
@@ -3852,7 +3889,7 @@ ShellRoot {
                         }
                     }
                     Rectangle {
-                        width: 52; height: 52; radius: 26; color: "#161616"
+                        width: 52; height: 52; radius: 26; color: shellRoot.panelCardColor
 
                         Canvas {
                             anchors.centerIn: parent
@@ -3882,7 +3919,7 @@ ShellRoot {
                 // --- ПОЛЗУНОК ЗВУКА ---
                 Rectangle {
                     id: audioBlock
-                    width: parent.width; height: controlCenter.audioBlockHeight; radius: 24; color: "#161616"
+                    width: parent.width; height: controlCenter.audioBlockHeight; radius: 24; color: shellRoot.panelCardColor
                     z: controlCenter.audioOutputMenuOpen || controlCenter.audioInputMenuOpen ? 10 : 0
                     Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                     HoverHandler {
@@ -3989,7 +4026,7 @@ ShellRoot {
                         background: Rectangle {
                             x: outputVolumeSlider.leftPadding
                             y: outputVolumeSlider.topPadding + (outputVolumeSlider.availableHeight - height) / 2
-                            width: outputVolumeSlider.availableWidth; height: 22; radius: 11; color: "#050505"; clip: true
+                            width: outputVolumeSlider.availableWidth; height: 22; radius: 11; color: shellRoot.panelTrackColor; clip: true
                             Rectangle {
                                 width: outputVolumeSlider.visualPosition * (outputVolumeSlider.availableWidth - outputVolumeSlider.handle.width)
                                        + outputVolumeSlider.handle.width / 2
@@ -4109,7 +4146,7 @@ ShellRoot {
                         background: Rectangle {
                             x: inputVolumeSlider.leftPadding
                             y: inputVolumeSlider.topPadding + (inputVolumeSlider.availableHeight - height) / 2
-                            width: inputVolumeSlider.availableWidth; height: 22; radius: 11; color: "#050505"; clip: true
+                            width: inputVolumeSlider.availableWidth; height: 22; radius: 11; color: shellRoot.panelTrackColor; clip: true
                             Rectangle {
                                 width: inputVolumeSlider.visualPosition * (inputVolumeSlider.availableWidth - inputVolumeSlider.handle.width)
                                        + inputVolumeSlider.handle.width / 2
@@ -4172,7 +4209,7 @@ ShellRoot {
                                     background: Rectangle {
                                         x: appVolumeSlider.leftPadding
                                         y: appVolumeSlider.topPadding + (appVolumeSlider.availableHeight - height) / 2
-                                        width: appVolumeSlider.availableWidth; height: 10; radius: 5; color: "#050505"; clip: true
+                                        width: appVolumeSlider.availableWidth; height: 10; radius: 5; color: shellRoot.panelTrackColor; clip: true
                                         Rectangle {
                                             width: appVolumeSlider.visualPosition * (appVolumeSlider.availableWidth - appVolumeSlider.handle.width)
                                                    + appVolumeSlider.handle.width / 2
@@ -4212,7 +4249,7 @@ ShellRoot {
                         width: 206
                         height: Math.min(4, controlCenter.audioOutputs.length) * 30 + 8
                         radius: 18
-                        color: "#080808"
+                        color: shellRoot.panelPopupColor
                         border.color: "#202020"
                         border.width: 1
                         clip: true
@@ -4246,8 +4283,10 @@ ShellRoot {
                                 height: 30
                                 radius: 14
                                 color: modelData.active
-                                    ? "#181818"
-                                    : (outputDeviceMouse.containsMouse ? "#121212" : "transparent")
+                                    ? (shellRoot.panelBlurEnabled ? shellRoot.panelInsetHoverColor : "#181818")
+                                    : (outputDeviceMouse.containsMouse
+                                        ? (shellRoot.panelBlurEnabled ? shellRoot.panelInsetColor : "#121212")
+                                        : "transparent")
 
                                 Text {
                                     anchors { left: parent.left; right: activeOutputDot.left; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 8 }
@@ -4291,7 +4330,7 @@ ShellRoot {
                         width: 206
                         height: Math.min(4, controlCenter.audioInputs.length) * 30 + 8
                         radius: 18
-                        color: "#080808"
+                        color: shellRoot.panelPopupColor
                         border.color: "#202020"
                         border.width: 1
                         clip: true
@@ -4325,8 +4364,10 @@ ShellRoot {
                                 height: 30
                                 radius: 14
                                 color: modelData.active
-                                    ? "#181818"
-                                    : (inputDeviceMouse.containsMouse ? "#121212" : "transparent")
+                                    ? (shellRoot.panelBlurEnabled ? shellRoot.panelInsetHoverColor : "#181818")
+                                    : (inputDeviceMouse.containsMouse
+                                        ? (shellRoot.panelBlurEnabled ? shellRoot.panelInsetColor : "#121212")
+                                        : "transparent")
 
                                 Text {
                                     anchors { left: parent.left; right: activeInputDot.left; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 8 }
@@ -4367,7 +4408,7 @@ ShellRoot {
 
                 // --- ПОЛЗУНОК ДИСПЛЕЯ ---
                 Rectangle {
-                    width: parent.width; height: 74; radius: 24; color: "#161616"
+                    width: parent.width; height: 74; radius: 24; color: shellRoot.panelCardColor
                     HoverHandler {
                         cursorShape: Qt.ArrowCursor
                         onHoveredChanged: controlCenter.holdPanelOpen(hovered)
@@ -4428,7 +4469,7 @@ ShellRoot {
                         background: Rectangle {
                             x: displaySlider.leftPadding
                             y: displaySlider.topPadding + (displaySlider.availableHeight - height) / 2
-                            width: displaySlider.availableWidth; height: 22; radius: 11; color: "#050505"
+                            width: displaySlider.availableWidth; height: 22; radius: 11; color: shellRoot.panelTrackColor
                             clip: true
 
                             Rectangle {
@@ -4469,7 +4510,7 @@ ShellRoot {
 
                     Rectangle {
                         anchors { top: parent.top; left: parent.left; right: parent.right }
-                        height: 52; radius: 26; color: "#161616"
+                        height: 52; radius: 26; color: shellRoot.panelCardColor
 
                         Rectangle {
                             anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
@@ -4548,7 +4589,7 @@ ShellRoot {
                         }
 
                         Rectangle {
-                            width: 40; height: 40; radius: 20; color: "#161616"
+                            width: 40; height: 40; radius: 20; color: shellRoot.panelCardColor
                             Text {
                                 anchors.centerIn: parent
                                 text: "+"; color: "#050505"
@@ -4566,7 +4607,7 @@ ShellRoot {
                 Rectangle {
                     width: parent.width
                     height: controlCenter.customAccentOpen ? 48 : 0
-                    radius: 22; color: "#161616"
+                    radius: 22; color: shellRoot.panelCardColor
                     opacity: controlCenter.customAccentOpen ? 1 : 0
                     visible: height > 0
                     clip: true
@@ -4597,7 +4638,7 @@ ShellRoot {
                         horizontalAlignment: TextInput.AlignHCenter
                         selectByMouse: true; padding: 0
                         validator: RegularExpressionValidator { regularExpression: /^#[0-9a-fA-F]{6}$/ }
-                        background: Rectangle { radius: 15; color: "#090909"; border.width: 1; border.color: customAccentField.activeFocus ? shellRoot.accentColor : "#303030" }
+                        background: Rectangle { radius: 15; color: shellRoot.panelFieldColor; border.width: 1; border.color: customAccentField.activeFocus ? shellRoot.accentColor : "#303030" }
                         onTextEdited: controlCenter.customAccentText = text
                         onAccepted: controlCenter.setAccent(text)
                     }
@@ -4625,7 +4666,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: 52; radius: 26; color: "#161616"
+                    width: parent.width; height: 52; radius: 26; color: shellRoot.panelCardColor
 
                     Column {
                         anchors.centerIn: parent
@@ -4677,7 +4718,7 @@ ShellRoot {
                             z: 100 - distance
                             visible: x < wallpaperCarousel.width && x + width > 0
                             radius: 22
-                            color: "#161616"
+                            color: shellRoot.panelCardColor
                             border.width: controlCenter.selectedWallpaper === modelData ? 2 : 0
                             border.color: shellRoot.accentColor
                             clip: true
@@ -4690,7 +4731,7 @@ ShellRoot {
                             ClippingRectangle {
                                 anchors.fill: parent
                                 radius: parent.radius
-                                color: "#161616"
+                                color: shellRoot.panelCardColor
 
                                 Image {
                                     anchors.fill: parent
@@ -4733,7 +4774,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: 36; radius: 18; color: "#161616"
+                    width: parent.width; height: 36; radius: 18; color: shellRoot.panelCardColor
 
                     Text {
                         anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
@@ -4759,7 +4800,73 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: 36; radius: 18; color: "#161616"
+                    width: parent.width; height: 36; radius: 18; color: shellRoot.panelCardColor
+
+                    Text {
+                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                        text: "Panel blur"
+                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+
+                    Rectangle {
+                        anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                        width: 48; height: 28; radius: 14
+                        color: shellRoot.panelBlurEnabled ? shellRoot.accentColor : "#303030"
+                        Behavior on color { ColorAnimation { duration: 180 } }
+
+                        Rectangle {
+                            width: 24; height: 24; radius: 12; color: "#ffffff"
+                            x: shellRoot.panelBlurEnabled ? parent.width - width - 2 : 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            cursorShape: Qt.PointingHandCursor
+                            anchors.fill: parent
+                            onClicked: {
+                                shellRoot.panelBlurEnabled = !shellRoot.panelBlurEnabled
+                                controlCenter.savePersonalizationSettings()
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 36; radius: 18; color: shellRoot.panelCardColor
+
+                    Text {
+                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                        text: "Accent background"
+                        color: "#ffffff"; font.bold: true; font.family: "SF Pro Rounded"; font.pixelSize: controlCenter.secondaryFontSize
+                    }
+
+                    Rectangle {
+                        anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                        width: 48; height: 28; radius: 14
+                        color: shellRoot.panelAccentBackground ? shellRoot.accentColor : "#303030"
+                        Behavior on color { ColorAnimation { duration: 180 } }
+
+                        Rectangle {
+                            width: 24; height: 24; radius: 12; color: "#ffffff"
+                            x: shellRoot.panelAccentBackground ? parent.width - width - 2 : 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            cursorShape: Qt.PointingHandCursor
+                            anchors.fill: parent
+                            onClicked: {
+                                shellRoot.panelAccentBackground = !shellRoot.panelAccentBackground
+                                controlCenter.savePersonalizationSettings()
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 36; radius: 18; color: shellRoot.panelCardColor
                     Text {
                         anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                         text: "Font"
@@ -4782,7 +4889,7 @@ ShellRoot {
                 visible: controlCenter.powerMenuOpen
 
                 Rectangle {
-                    width: parent.width; height: 52; radius: 24; color: "#161616"
+                    width: parent.width; height: 52; radius: 24; color: shellRoot.panelCardColor
 
                     Rectangle {
                         width: 40; height: 40; radius: 20
@@ -4869,7 +4976,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: 80; radius: 24; color: "#161616"
+                    width: parent.width; height: 80; radius: 24; color: shellRoot.panelCardColor
 
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
@@ -4892,7 +4999,7 @@ ShellRoot {
                                 required property var modelData
                                 readonly property bool selected: controlCenter.powerProfile === modelData.profile
                                 width: (parent.width - 8) / 3; height: 25; radius: 13
-                                color: selected ? shellRoot.accentColor : "#050505"
+                                color: selected ? shellRoot.accentColor : shellRoot.panelTrackColor
                                 Behavior on color { ColorAnimation { duration: 160 } }
 
                                 Text {
@@ -4913,7 +5020,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: 106; radius: 24; color: "#161616"
+                    width: parent.width; height: 106; radius: 24; color: shellRoot.panelCardColor
 
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 13; leftMargin: 16 }
@@ -4932,7 +5039,7 @@ ShellRoot {
 
                     Rectangle {
                         anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 42 }
-                        height: 22; radius: 11; color: "#050505"; clip: true
+                        height: 22; radius: 11; color: shellRoot.panelTrackColor; clip: true
                         Rectangle {
                             width: controlCenter.batteryPresent ? parent.width * Math.min(100, controlCenter.batteryPercent) / 100 : 0
                             height: parent.height; radius: 11; color: shellRoot.accentColor
@@ -4949,7 +5056,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: 74; radius: 24; color: "#161616"
+                    width: parent.width; height: 74; radius: 24; color: shellRoot.panelCardColor
 
                     Text {
                         anchors { top: parent.top; left: parent.left; topMargin: 12; leftMargin: 16 }
@@ -4965,7 +5072,7 @@ ShellRoot {
 
                     Rectangle {
                         anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 14 }
-                        height: 22; radius: 11; color: "#050505"; clip: true
+                        height: 22; radius: 11; color: shellRoot.panelTrackColor; clip: true
                         Rectangle {
                             width: controlCenter.batteryPresent ? parent.width * Math.min(100, controlCenter.batteryHealth) / 100 : 0
                             height: parent.height; radius: 11; color: shellRoot.accentColor
@@ -4981,7 +5088,7 @@ ShellRoot {
                 visible: controlCenter.wifiMenuOpen
 
                 Rectangle {
-                    width: parent.width; height: 52; radius: 24; color: "#161616"
+                    width: parent.width; height: 52; radius: 24; color: shellRoot.panelCardColor
 
                     Rectangle {
                         width: 40; height: 40; radius: 20
@@ -5048,7 +5155,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: controlCenter.wifiSavedBlockHeight; radius: 24; color: "#161616"
+                    width: parent.width; height: controlCenter.wifiSavedBlockHeight; radius: 24; color: shellRoot.panelCardColor
                     Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                     Text {
@@ -5070,7 +5177,7 @@ ShellRoot {
                             readonly property bool activeNetwork: controlCenter.savedNetworkIsActive(modelData.name)
                             readonly property bool connectingNetwork: modelData.name === controlCenter.wifiConnectingSsid
                             width: ListView.view.width; height: 24; radius: 12
-                            color: savedNetworkMouse.containsMouse ? "#080808" : "#000000"
+                            color: savedNetworkMouse.containsMouse ? shellRoot.panelInsetHoverColor : shellRoot.panelInsetColor
 
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: savedNetworkStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
@@ -5122,7 +5229,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: controlCenter.wifiNewBlockHeight; radius: 24; color: "#161616"
+                    width: parent.width; height: controlCenter.wifiNewBlockHeight; radius: 24; color: shellRoot.panelCardColor
                     Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                     Text {
@@ -5143,7 +5250,7 @@ ShellRoot {
                             required property var modelData
                             readonly property bool connectingNetwork: modelData.ssid === controlCenter.wifiConnectingSsid
                             width: ListView.view.width; height: 24; radius: 12
-                            color: newNetworkMouse.containsMouse ? "#080808" : "#000000"
+                            color: newNetworkMouse.containsMouse ? shellRoot.panelInsetHoverColor : shellRoot.panelInsetColor
 
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: newNetworkStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
@@ -5201,7 +5308,7 @@ ShellRoot {
                 visible: controlCenter.bluetoothMenuOpen
 
                 Rectangle {
-                    width: parent.width; height: 52; radius: 24; color: "#161616"
+                    width: parent.width; height: 52; radius: 24; color: shellRoot.panelCardColor
 
                     Rectangle {
                         width: 40; height: 40; radius: 20
@@ -5273,7 +5380,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: controlCenter.bluetoothSavedBlockHeight; radius: 24; color: "#161616"
+                    width: parent.width; height: controlCenter.bluetoothSavedBlockHeight; radius: 24; color: shellRoot.panelCardColor
                     Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                     Text {
@@ -5295,7 +5402,7 @@ ShellRoot {
                             readonly property bool connectedDevice: controlCenter.bluetoothIsConnected(modelData.address)
                             readonly property bool pendingDevice: modelData.address === controlCenter.bluetoothPendingAddress
                             width: ListView.view.width; height: 24; radius: 12
-                            color: savedBluetoothMouse.containsMouse ? "#080808" : "#000000"
+                            color: savedBluetoothMouse.containsMouse ? shellRoot.panelInsetHoverColor : shellRoot.panelInsetColor
 
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: savedBluetoothStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
@@ -5349,7 +5456,7 @@ ShellRoot {
                 }
 
                 Rectangle {
-                    width: parent.width; height: controlCenter.bluetoothNewBlockHeight; radius: 24; color: "#161616"
+                    width: parent.width; height: controlCenter.bluetoothNewBlockHeight; radius: 24; color: shellRoot.panelCardColor
                     Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                     Text {
@@ -5370,7 +5477,7 @@ ShellRoot {
                             required property var modelData
                             readonly property bool pairingDevice: modelData.address === controlCenter.bluetoothPendingAddress
                             width: ListView.view.width; height: 24; radius: 12
-                            color: newBluetoothMouse.containsMouse ? "#080808" : "#000000"
+                            color: newBluetoothMouse.containsMouse ? shellRoot.panelInsetHoverColor : shellRoot.panelInsetColor
 
                             Text {
                                 anchors { left: parent.left; leftMargin: 10; right: newBluetoothStatus.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
@@ -5427,7 +5534,7 @@ ShellRoot {
                 anchors.fill: parent
                 anchors.margins: 8
                 visible: controlCenter.nightModeMenuOpen
-                color: "#000000"
+                color: shellRoot.panelCardColor
                 radius: 28
 
                 MouseArea {
@@ -5458,7 +5565,7 @@ ShellRoot {
                         x: nightWarmthSlider.leftPadding
                         y: nightWarmthSlider.topPadding + nightWarmthSlider.availableHeight / 2 - height / 2
                         width: nightWarmthSlider.availableWidth; height: 44; radius: 22
-                        color: "#161616"
+                        color: shellRoot.panelCardColor
                         clip: true
 
                         Rectangle {
@@ -5529,7 +5636,7 @@ ShellRoot {
                         inputMethodHints: Qt.ImhPreferNumbers
                         validator: RegularExpressionValidator { regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]$/ }
                         background: Rectangle {
-                            color: "#161616"; radius: 8
+                            color: shellRoot.panelCardColor; radius: 8
                             border.width: 1
                             border.color: nightFromField.activeFocus ? shellRoot.accentColor : "#303030"
                         }
@@ -5554,7 +5661,7 @@ ShellRoot {
                         inputMethodHints: Qt.ImhPreferNumbers
                         validator: RegularExpressionValidator { regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]$/ }
                         background: Rectangle {
-                            color: "#161616"; radius: 8
+                            color: shellRoot.panelCardColor; radius: 8
                             border.width: 1
                             border.color: nightToField.activeFocus ? shellRoot.accentColor : "#303030"
                         }
@@ -5620,8 +5727,7 @@ ShellRoot {
 
                 Rectangle {
                     anchors.centerIn: parent
-                    width: 304; height: 132; radius: 24; color: "#161616"
-                    border.width: 1; border.color: "#303030"
+                    width: 304; height: 132; radius: 24; color: shellRoot.panelCardColor
 
                     MouseArea { anchors.fill: parent }
 
@@ -5646,7 +5752,7 @@ ShellRoot {
                         focus: controlCenter.wifiPasswordPromptOpen
                         selectByMouse: true
                         leftPadding: 12; rightPadding: 12
-                        background: Rectangle { radius: 17; color: "#090909"; border.width: 1; border.color: wifiPasswordField.activeFocus ? shellRoot.accentColor : "#303030" }
+                        background: Rectangle { radius: 17; color: shellRoot.panelFieldColor; border.width: 1; border.color: wifiPasswordField.activeFocus ? shellRoot.accentColor : "#303030" }
                         onAccepted: controlCenter.connectVisibleNetwork(controlCenter.wifiPendingSsid, text)
                         Keys.onEscapePressed: controlCenter.wifiPasswordPromptOpen = false
                     }

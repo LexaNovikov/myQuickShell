@@ -8,7 +8,7 @@ PanelWindow {
     property color accentColor: "#25d8a3"
     property bool shown: false
     property bool displaying: false
-    property bool hadFocus: false
+    property bool inserting: false
     property string category: "recent"
     property string pendingEmoji: ""
     property var emojis: []
@@ -49,7 +49,8 @@ PanelWindow {
     exclusiveZone: 0
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-emoji-picker"
-    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: shown && !inserting
+        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     mask: Region {
         x: 0; y: 0
         width: picker.displaying ? picker.width : 0
@@ -111,7 +112,6 @@ PanelWindow {
         category = "recent"
         searchInput.text = ""
         refresh()
-        hadFocus = false
         displaying = true
         shown = true
         focusDelay.restart()
@@ -120,16 +120,17 @@ PanelWindow {
     function close() {
         if (!shown) return
         shown = false
+        inserting = false
         focusDelay.stop()
         hideDelay.restart()
     }
 
     function choose(symbol) {
-        if (!symbol) return
+        if (!symbol || inserting) return
         recent = [symbol].concat(recent.filter(value => value !== symbol)).slice(0, 35)
         recentFile.setText(JSON.stringify(recent))
         pendingEmoji = symbol
-        close()
+        inserting = true
         typeDelay.restart()
     }
 
@@ -138,6 +139,20 @@ PanelWindow {
         emojiGrid.currentIndex = Math.max(0, Math.min(filtered.length - 1,
                                                        emojiGrid.currentIndex + offset))
         emojiGrid.positionViewAtIndex(emojiGrid.currentIndex, GridView.Contain)
+    }
+
+    function selectCategory(id) {
+        category = id
+        if (searchInput.text !== "") searchInput.text = ""
+        refresh()
+        searchInput.forceActiveFocus()
+    }
+
+    function moveCategory(offset) {
+        const count = categories.length
+        let index = categories.findIndex(item => item.id === category)
+        if (index < 0) index = 0
+        selectCategory(categories[(index + offset + count) % count].id)
     }
 
     IpcHandler {
@@ -185,7 +200,13 @@ PanelWindow {
         loadEmojis()
     }
 
-    Process { id: typeEmoji }
+    Process {
+        id: typeEmoji
+        onExited: {
+            picker.inserting = false
+            if (picker.shown) focusDelay.restart()
+        }
+    }
 
     Timer {
         id: focusDelay
@@ -210,11 +231,7 @@ PanelWindow {
 
     FocusScope {
         anchors.fill: parent
-        focus: picker.shown
-        onActiveFocusChanged: {
-            if (activeFocus) picker.hadFocus = true
-            else if (picker.shown && picker.hadFocus) picker.close()
-        }
+        focus: picker.shown && !picker.inserting
 
         Rectangle {
             id: panel
@@ -239,7 +256,7 @@ PanelWindow {
 
             Text {
                 anchors { right: parent.right; top: parent.top; rightMargin: 19; topMargin: 18 }
-                text: "Esc — закрыть"
+                text: "Ctrl+←/→ категории  ·  Esc"
                 color: "#777777"
                 font.family: "SF Pro Rounded"
                 font.pixelSize: 11
@@ -282,13 +299,18 @@ PanelWindow {
                     }
 
                     Keys.onPressed: event => {
+                        const control = event.modifiers & Qt.ControlModifier
                         if (event.key === Qt.Key_Escape) picker.close()
+                        else if (control && (event.key === Qt.Key_Right || event.key === Qt.Key_Down))
+                            picker.moveCategory(1)
+                        else if (control && (event.key === Qt.Key_Left || event.key === Qt.Key_Up))
+                            picker.moveCategory(-1)
                         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
                             picker.choose(picker.filtered[emojiGrid.currentIndex]?.emoji)
                         else if (event.key === Qt.Key_Down) picker.moveSelection(7)
                         else if (event.key === Qt.Key_Up) picker.moveSelection(-7)
-                        else if (event.key === Qt.Key_Right && searchInput.text === "") picker.moveSelection(1)
-                        else if (event.key === Qt.Key_Left && searchInput.text === "") picker.moveSelection(-1)
+                        else if (event.key === Qt.Key_Right) picker.moveSelection(1)
+                        else if (event.key === Qt.Key_Left) picker.moveSelection(-1)
                         else return
                         event.accepted = true
                     }
@@ -309,27 +331,65 @@ PanelWindow {
 
                         Text {
                             anchors.centerIn: parent
+                            visible: parent.modelData.id !== "all" && parent.modelData.id !== "recent"
                             anchors.horizontalCenterOffset: fluentFont.status === FontLoader.Ready
-                                && parent.modelData.id !== "all" && parent.modelData.id !== "recent"
                                 && parent.modelData.id !== "flags" ? 1 : 0
                             anchors.verticalCenterOffset: fluentFont.status === FontLoader.Ready
-                                && parent.modelData.id !== "all" && parent.modelData.id !== "recent"
-                                && parent.modelData.id !== "flags" ? -4 : 0
+                                && parent.modelData.id !== "flags" ? -9 : 0
                             text: parent.modelData.icon
                             color: picker.category === parent.modelData.id ? picker.accentColor : "#aaaaaa"
                             font.family: parent.modelData.id === "flags"
-                                ? "Noto Color Emoji" : picker.emojiFontFamily
-                            font.pixelSize: 17
+                                ? "SF Pro Rounded" : picker.emojiFontFamily
+                            font.pixelSize: 22
+                        }
+
+                        Item {
+                            anchors.centerIn: parent
+                            width: 22; height: 22
+                            visible: parent.modelData.id === "all"
+
+                            Grid {
+                                anchors.centerIn: parent
+                                columns: 2
+                                spacing: 3
+                                Repeater {
+                                    model: 4
+                                    delegate: Rectangle {
+                                        width: 7; height: 7; radius: 2
+                                        color: picker.category === "all" ? picker.accentColor : "#aaaaaa"
+                                    }
+                                }
+                            }
+                        }
+
+                        Item {
+                            anchors.centerIn: parent
+                            width: 22; height: 22
+                            visible: parent.modelData.id === "recent"
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 19; height: 19; radius: 9.5
+                                color: "transparent"
+                                border.width: 2
+                                border.color: picker.category === "recent" ? picker.accentColor : "#aaaaaa"
+                            }
+                            Rectangle {
+                                x: 10; y: 5
+                                width: 2; height: 7; radius: 1
+                                color: picker.category === "recent" ? picker.accentColor : "#aaaaaa"
+                            }
+                            Rectangle {
+                                x: 10; y: 10
+                                width: 6; height: 2; radius: 1
+                                color: picker.category === "recent" ? picker.accentColor : "#aaaaaa"
+                            }
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                picker.category = parent.modelData.id
-                                picker.refresh()
-                                searchInput.forceActiveFocus()
-                            }
+                            onClicked: picker.selectCategory(parent.modelData.id)
                         }
                     }
                 }
