@@ -109,6 +109,24 @@ qs -d
 
 Без SF Pro Rounded панель запустится, но ширина текста, расположение подписей и визуальное выравнивание глифов могут отличаться.
 
+## Установка Fluent Emoji 3D
+
+Меню эмодзи использует рисунки [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) из цветной сборки [emojifonts](https://github.com/iebb/emojifonts). Это не отдельный официальный шрифт Microsoft: проект emojifonts собирает `fluent.ttf` из свободно доступных материалов. Установите его в путь, который ожидает `EmojiPicker.qml`:
+
+```bash
+emoji_font_dir="$HOME/.local/share/fonts/FluentEmoji3D"
+mkdir -p "$emoji_font_dir"
+curl -fL --retry 3 'https://github.com/iebb/emojifonts/releases/download/latest/fluent.ttf' -o "$emoji_font_dir/FluentEmoji3D.ttf"
+curl -fL --retry 3 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/LICENSE' -o "$emoji_font_dir/Microsoft-LICENSE"
+curl -fL --retry 3 'https://raw.githubusercontent.com/tetunori/fluent-emoji-webfont/main/LICENSE' -o "$emoji_font_dir/Webfont-LICENSE"
+fc-cache -f "$emoji_font_dir"
+fc-match 'Fluent Emoji 3D'
+```
+
+Если `fc-match` показывает `FluentEmoji3D.ttf`, перезапустите Quickshell, чтобы меню подхватило новый шрифт. Сборка не содержит флаги стран: для них меню использует Noto Color Emoji.
+
+## Запуск панели
+
 Включите службы сети и Bluetooth:
 
 ```bash
@@ -266,7 +284,7 @@ sudo reboot
 
 Если установлен `fprintd` и для выбранного пользователя зарегистрирован отпечаток, проверка пальца запускается сразу при появлении greeter-а и ждёт без короткого таймаута. Если начать вводить пароль, greeter отменит ожидание сенсора и немедленно перезапустит аутентификацию через стандартный `system-local-login`; повторно прикладывать палец после пароля не нужно. На компьютере без сенсора PAM сразу показывает запрос пароля.
 
-Чтобы перенести оформление на ноутбук, скопируйте весь каталог `~/.config/quickshell`, установите зависимости и шрифт, зарегистрируйте отпечаток, проверьте preview и выполните ту же команду установки:
+Чтобы перенести оформление на ноутбук, скопируйте весь каталог `~/.config/quickshell`, установите зависимости, SF Pro Rounded и Fluent Emoji 3D по инструкциям выше, зарегистрируйте отпечаток, проверьте preview и выполните ту же команду установки:
 
 ```bash
 sudo pacman -S --needed - < dependencies.txt
