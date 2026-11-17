@@ -111,19 +111,20 @@ qs -d
 
 ## Установка Fluent Emoji 3D
 
-Меню эмодзи использует рисунки [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) из цветной сборки [emojifonts](https://github.com/iebb/emojifonts). Это не отдельный официальный шрифт Microsoft: проект emojifonts собирает `fluent.ttf` из свободно доступных материалов. Установите его в путь, который ожидает `EmojiPicker.qml`:
+Меню эмодзи использует рисунки [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) из цветной сборки [emojifonts](https://github.com/iebb/emojifonts). Это не отдельный официальный шрифт Microsoft: проект emojifonts собирает `fluent.ttf` из свободно доступных материалов. В текущем релизе `latest` файла `.ttf` нет, поэтому используйте [релиз 2026.10](https://github.com/iebb/emojifonts/releases/tag/2026.10). Установите файл в путь, который ожидает `EmojiPicker.qml`:
 
 ```bash
 emoji_font_dir="$HOME/.local/share/fonts/FluentEmoji3D"
 mkdir -p "$emoji_font_dir"
-curl -fL --retry 3 'https://github.com/iebb/emojifonts/releases/download/latest/fluent.ttf' -o "$emoji_font_dir/FluentEmoji3D.ttf"
+curl -fL --retry 3 'https://github.com/iebb/emojifonts/releases/download/2026.10/fluent.ttf' -o "$emoji_font_dir/FluentEmoji3D.ttf"
 curl -fL --retry 3 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/LICENSE' -o "$emoji_font_dir/Microsoft-LICENSE"
 curl -fL --retry 3 'https://raw.githubusercontent.com/tetunori/fluent-emoji-webfont/main/LICENSE' -o "$emoji_font_dir/Webfont-LICENSE"
 fc-cache -f "$emoji_font_dir"
-fc-match 'Fluent Emoji 3D'
+fc-scan --format '%{family}\n' "$emoji_font_dir/FluentEmoji3D.ttf"
+fc-match 'Fluent Emoji Color'
 ```
 
-Если `fc-match` показывает `FluentEmoji3D.ttf`, перезапустите Quickshell, чтобы меню подхватило новый шрифт. Сборка не содержит флаги стран: для них меню использует Noto Color Emoji.
+`fc-scan` должен показать `Fluent Emoji Color`, а `fc-match` — файл `FluentEmoji3D.ttf`. Затем перезапустите Quickshell, чтобы меню подхватило новый шрифт. Сборка не содержит флаги стран: для них меню использует Noto Color Emoji.
 
 ## Запуск панели
 
